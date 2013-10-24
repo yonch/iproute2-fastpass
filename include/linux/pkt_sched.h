@@ -785,4 +785,47 @@ struct tc_fq_qd_stats {
 	__u32	throttled_flows;
 	__u32	pad;
 };
+
+
+/* FastPass */
+
+enum {
+	TCA_FP_UNSPEC,
+
+	TCA_FP_PLIMIT,		/* limit of total number of packets in queue */
+
+	TCA_FP_FLOW_PLIMIT,	/* limit of packets per flow */
+
+	TCA_FP_QUANTUM,		/* RR quantum */
+
+	TCA_FP_INITIAL_QUANTUM,		/* RR quantum for new flow */
+
+	TCA_FP_RATE_ENABLE,	/* enable/disable rate limiting */
+
+	TCA_FP_FLOW_DEFAULT_RATE,/* for sockets with unspecified sk_rate,
+				  * use the following rate
+				  */
+
+	TCA_FP_FLOW_MAX_RATE,	/* per flow max rate */
+
+	TCA_FP_BUCKETS_LOG,	/* log2(number of buckets) */
+	__TCA_FP_MAX
+};
+
+#define TCA_FP_MAX	(__TCA_FP_MAX - 1)
+
+struct tc_fastpass_qd_stats {
+	__u64	gc_flows;
+	__u64	highprio_packets;
+	__u64	tcp_retrans;
+	__u64	throttled;
+	__u64	flows_plimit;
+	__u64	pkts_too_long;
+	__u64	allocation_errors;
+	__s64	time_next_delayed_flow;
+	__u32	flows;
+	__u32	inactive_flows;
+	__u32	throttled_flows;
+	__u32	pad;
+};
 #endif
