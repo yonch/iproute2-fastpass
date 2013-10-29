@@ -1,7 +1,6 @@
 /*
  * FastPass
  *
- *  Copyright (C) 2013 Eric Dumazet <edumazet@google.com> (q_fq.c)
  *  Copyright (C) 2013 Jonathan Perry <yonch@yonch.com>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -52,9 +51,9 @@
 static void explain(void)
 {
 	fprintf(stderr, "Usage: ... fastpass [ limit PACKETS ] [ flow_limit PACKETS ]\n");
-	fprintf(stderr, "              [ quantum BYTES ] [ initial_quantum BYTES ]\n");
-	fprintf(stderr, "              [ maxrate RATE  ] [ buckets NUMBER ]\n");
-	fprintf(stderr, "              [ [no]pacing ]\n"); 
+	fprintf(stderr, "              [ buckets NUMBER ] [ rate RATE ]\n");
+	fprintf(stderr, "              [ timeslot NSECS  ] [ req_cost NSEC ]\n");
+	fprintf(stderr, "              [ req_bucket NSEC ] [ req_gap NSEC ]\n");
 }
 
 static unsigned int ilog2(unsigned int val)
@@ -74,12 +73,12 @@ static int fastpass_parse_opt(struct qdisc_util *qu, int argc, char **argv,
 {
 	unsigned int plimit = ~0U;
 	unsigned int flow_plimit = ~0U;
-	unsigned int quantum = ~0U;
-	unsigned int initial_quantum = ~0U;
 	unsigned int buckets = 0;
-	unsigned int maxrate = ~0U;
-	unsigned int defrate = ~0U;
-	int pacing = -1;
+	unsigned int data_rate = ~0U;
+	unsigned int tslot_len = ~0U;
+	unsigned int req_cost = ~0U;
+	unsigned int req_bucketlen = ~0U;
+	unsigned int req_min_gap = ~0U;
 	struct rtattr *tail;
 
 	while (argc > 0) {
@@ -101,34 +100,36 @@ static int fastpass_parse_opt(struct qdisc_util *qu, int argc, char **argv,
 				fprintf(stderr, "Illegal \"buckets\"\n");
 				return -1;
 			}
-		} else if (strcmp(*argv, "maxrate") == 0) {
+		} else if (strcmp(*argv, "rate") == 0) {
 			NEXT_ARG();
-			if (get_rate(&maxrate, *argv)) {
-				fprintf(stderr, "Illegal \"maxrate\"\n");
+			if (get_rate(&data_rate, *argv)) {
+				fprintf(stderr, "Illegal \"rate\"\n");
 				return -1;
 			}
-		} else if (strcmp(*argv, "defrate") == 0) {
+		} else if (strcmp(*argv, "timeslot") == 0) {
 			NEXT_ARG();
-			if (get_rate(&defrate, *argv)) {
-				fprintf(stderr, "Illegal \"defrate\"\n");
+			if (get_unsigned(&tslot_len, *argv)) {
+				fprintf(stderr, "Illegal \"timeslot\"\n");
 				return -1;
 			}
-		} else if (strcmp(*argv, "quantum") == 0) {
+		} else if (strcmp(*argv, "req_cost") == 0) {
 			NEXT_ARG();
-			if (get_unsigned(&quantum, *argv, 0)) {
-				fprintf(stderr, "Illegal \"quantum\"\n");
+			if (get_unsigned(&req_cost, *argv, 0)) {
+				fprintf(stderr, "Illegal \"req_cost\"\n");
 				return -1;
 			}
-		} else if (strcmp(*argv, "initial_quantum") == 0) {
+		} else if (strcmp(*argv, "req_bucket") == 0) {
 			NEXT_ARG();
-			if (get_unsigned(&initial_quantum, *argv, 0)) {
-				fprintf(stderr, "Illegal \"initial_quantum\"\n");
+			if (get_unsigned(&req_bucketlen, *argv, 0)) {
+				fprintf(stderr, "Illegal \"req_bucket\"\n");
 				return -1;
 			}
-		} else if (strcmp(*argv, "pacing") == 0) {
-			pacing = 1;
-		} else if (strcmp(*argv, "nopacing") == 0) {
-			pacing = 0;
+		} else if (strcmp(*argv, "req_gap") == 0) {
+			NEXT_ARG();
+			if (get_unsigned(&req_min_gap, *argv, 0)) {
+				fprintf(stderr, "Illegal \"req_gap\"\n");
+				return -1;
+			}
 		} else if (strcmp(*argv, "help") == 0) {
 			explain();
 			return -1;
@@ -142,32 +143,32 @@ static int fastpass_parse_opt(struct qdisc_util *qu, int argc, char **argv,
 
 	tail = NLMSG_TAIL(n);
 	addattr_l(n, 1024, TCA_OPTIONS, NULL, 0);
-	if (buckets) {
-		unsigned int log = ilog2(buckets);
-
-		addattr_l(n, 1024, TCA_FP_BUCKETS_LOG,
-			  &log, sizeof(log));
-	}
 	if (plimit != ~0U)
-		addattr_l(n, 1024, TCA_FP_PLIMIT,
+		addattr_l(n, 1024, TCA_FASTPASS_PLIMIT,
 			  &plimit, sizeof(plimit));
 	if (flow_plimit != ~0U)
-		addattr_l(n, 1024, TCA_FP_FLOW_PLIMIT,
+		addattr_l(n, 1024, TCA_FASTPASS_FLOW_PLIMIT,
 			  &flow_plimit, sizeof(flow_plimit));
-	if (quantum != ~0U)
-		addattr_l(n, 1024, TCA_FP_QUANTUM, &quantum, sizeof(quantum));
-	if (initial_quantum != ~0U)
-		addattr_l(n, 1024, TCA_FP_INITIAL_QUANTUM,
-			  &initial_quantum, sizeof(initial_quantum));
-	if (pacing != -1)
-		addattr_l(n, 1024, TCA_FP_RATE_ENABLE,
-			  &pacing, sizeof(pacing));
-	if (maxrate != ~0U)
-		addattr_l(n, 1024, TCA_FP_FLOW_MAX_RATE,
-			  &maxrate, sizeof(maxrate));
-	if (defrate != ~0U)
-		addattr_l(n, 1024, TCA_FP_FLOW_DEFAULT_RATE,
-			  &defrate, sizeof(defrate));
+	if (buckets) {
+		unsigned int log = ilog2(buckets);
+		addattr_l(n, 1024, TCA_FASTPASS_BUCKETS_LOG,
+			  &log, sizeof(log));
+	}
+	if (data_rate != ~0U)
+		addattr_l(n, 1024, TCA_FASTPASS_DATA_RATE,
+				&data_rate, sizeof(data_rate));
+	if (tslot_len != ~0U)
+		addattr_l(n, 1024, TCA_FASTPASS_TIMESLOT_NSEC,
+			  &tslot_len, sizeof(tslot_len));
+	if (req_cost != ~0U)
+		addattr_l(n, 1024, TCA_FASTPASS_REQUEST_COST,
+			  &req_cost, sizeof(req_cost));
+	if (req_bucketlen != ~0U)
+		addattr_l(n, 1024, TCA_FASTPASS_REQUEST_BUCKET,
+			  &req_bucketlen, sizeof(req_bucketlen));
+	if (req_min_gap != ~0U)
+		addattr_l(n, 1024, TCA_FASTPASS_REQUEST_GAP,
+			  &req_min_gap, sizeof(req_min_gap));
 	tail->rta_len = (void *) NLMSG_TAIL(n) - (void *) tail;
 	return 0;
 }
@@ -177,8 +178,11 @@ static int fastpass_print_opt(struct qdisc_util *qu, FILE *f, struct rtattr *opt
 	struct rtattr *tb[TCA_FP_MAX + 1];
 	unsigned int plimit, flow_plimit;
 	unsigned int buckets_log;
-	int pacing;
-	unsigned int rate, quantum;
+	unsigned int data_rate;
+	unsigned int tslot_len;
+	unsigned int req_cost;
+	unsigned int req_bucketlen;
+	unsigned int req_min_gap;
 	SPRINT_BUF(b1);
 
 	if (opt == NULL)
@@ -186,50 +190,45 @@ static int fastpass_print_opt(struct qdisc_util *qu, FILE *f, struct rtattr *opt
 
 	parse_rtattr_nested(tb, TCA_FP_MAX, opt);
 
-	if (tb[TCA_FP_PLIMIT] &&
-	    RTA_PAYLOAD(tb[TCA_FP_PLIMIT]) >= sizeof(__u32)) {
-		plimit = rta_getattr_u32(tb[TCA_FP_PLIMIT]);
+	if (tb[TCA_FASTPASS_PLIMIT] &&
+	    RTA_PAYLOAD(tb[TCA_FASTPASS_PLIMIT]) >= sizeof(__u32)) {
+		plimit = rta_getattr_u32(tb[TCA_FASTPASS_PLIMIT]);
 		fprintf(f, "limit %up ", plimit);
 	}
-	if (tb[TCA_FP_FLOW_PLIMIT] &&
-	    RTA_PAYLOAD(tb[TCA_FP_FLOW_PLIMIT]) >= sizeof(__u32)) {
-		flow_plimit = rta_getattr_u32(tb[TCA_FP_FLOW_PLIMIT]);
+	if (tb[TCA_FASTPASS_FLOW_PLIMIT] &&
+	    RTA_PAYLOAD(tb[TCA_FASTPASS_FLOW_PLIMIT]) >= sizeof(__u32)) {
+		flow_plimit = rta_getattr_u32(tb[TCA_FASTPASS_FLOW_PLIMIT]);
 		fprintf(f, "flow_limit %up ", flow_plimit);
 	}
-	if (tb[TCA_FP_BUCKETS_LOG] &&
-	    RTA_PAYLOAD(tb[TCA_FP_BUCKETS_LOG]) >= sizeof(__u32)) {
-		buckets_log = rta_getattr_u32(tb[TCA_FP_BUCKETS_LOG]);
+	if (tb[TCA_FASTPASS_BUCKETS_LOG] &&
+	    RTA_PAYLOAD(tb[TCA_FASTPASS_BUCKETS_LOG]) >= sizeof(__u32)) {
+		buckets_log = rta_getattr_u32(tb[TCA_FASTPASS_BUCKETS_LOG]);
 		fprintf(f, "buckets %u ", 1U << buckets_log);
 	}
-	if (tb[TCA_FP_RATE_ENABLE] &&
-	    RTA_PAYLOAD(tb[TCA_FP_RATE_ENABLE]) >= sizeof(int)) {
-		pacing = rta_getattr_u32(tb[TCA_FP_RATE_ENABLE]);
-		if (pacing == 0)
-			fprintf(f, "nopacing ");
+	if (tb[TCA_FASTPASS_DATA_RATE] &&
+	    RTA_PAYLOAD(tb[TCA_FASTPASS_DATA_RATE]) >= sizeof(__u32)) {
+		data_rate = rta_getattr_u32(tb[TCA_FASTPASS_DATA_RATE]);
+		fprintf(f, "rate %s ", sprint_rate(data_rate, b1));
 	}
-	if (tb[TCA_FP_QUANTUM] &&
-	    RTA_PAYLOAD(tb[TCA_FP_QUANTUM]) >= sizeof(__u32)) {
-		quantum = rta_getattr_u32(tb[TCA_FP_QUANTUM]);
-		fprintf(f, "quantum %u ", quantum);
+	if (tb[TCA_FASTPASS_TIMESLOT_NSEC] &&
+	    RTA_PAYLOAD(tb[TCA_FASTPASS_TIMESLOT_NSEC]) >= sizeof(__u32)) {
+		tslot_len = rta_getattr_u32(tb[TCA_FASTPASS_TIMESLOT_NSEC]);
+		fprintf(f, "timeslot %u ", tslot_len);
 	}
-	if (tb[TCA_FP_INITIAL_QUANTUM] &&
-	    RTA_PAYLOAD(tb[TCA_FP_INITIAL_QUANTUM]) >= sizeof(__u32)) {
-		quantum = rta_getattr_u32(tb[TCA_FP_INITIAL_QUANTUM]);
-		fprintf(f, "initial_quantum %u ", quantum);
+	if (tb[TCA_FASTPASS_REQUEST_COST] &&
+	    RTA_PAYLOAD(tb[TCA_FASTPASS_REQUEST_COST]) >= sizeof(__u32)) {
+		req_cost = rta_getattr_u32(tb[TCA_FASTPASS_REQUEST_COST]);
+		fprintf(f, "req_cost %u ", req_cost);
 	}
-	if (tb[TCA_FP_FLOW_MAX_RATE] &&
-	    RTA_PAYLOAD(tb[TCA_FP_FLOW_MAX_RATE]) >= sizeof(__u32)) {
-		rate = rta_getattr_u32(tb[TCA_FP_FLOW_MAX_RATE]);
-
-		if (rate != ~0U)
-			fprintf(f, "maxrate %s ", sprint_rate(rate, b1));
+	if (tb[TCA_FASTPASS_REQUEST_BUCKET] &&
+	    RTA_PAYLOAD(tb[TCA_FASTPASS_REQUEST_BUCKET]) >= sizeof(__u32)) {
+		req_bucketlen = rta_getattr_u32(tb[TCA_FASTPASS_REQUEST_BUCKET]);
+		fprintf(f, "req_bucket %u ", req_bucketlen);
 	}
-	if (tb[TCA_FP_FLOW_DEFAULT_RATE] &&
-	    RTA_PAYLOAD(tb[TCA_FP_FLOW_DEFAULT_RATE]) >= sizeof(__u32)) {
-		rate = rta_getattr_u32(tb[TCA_FP_FLOW_DEFAULT_RATE]);
-
-		if (rate != 0)
-			fprintf(f, "defrate %s ", sprint_rate(rate, b1));
+	if (tb[TCA_FASTPASS_REQUEST_GAP] &&
+	    RTA_PAYLOAD(tb[TCA_FASTPASS_REQUEST_GAP]) >= sizeof(__u32)) {
+		req_min_gap = rta_getattr_u32(tb[TCA_FASTPASS_REQUEST_GAP]);
+		fprintf(f, "req_gap %u ", req_min_gap);
 	}
 
 	return 0;
@@ -248,26 +247,28 @@ static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 
 	st = RTA_DATA(xstats);
 
-	fprintf(f, "  %u flows (%u inactive, %u throttled)",
-		st->flows, st->inactive_flows, st->throttled_flows);
+	/* flow statistics */
+	fprintf(f, "  %u flows (%u inactive, %u unrequested)",
+		st->flows, st->inactive_flows, st->unrequested_flows);
+	fprintf(f, ", %llu gc", st->gc_flows);
 
-	if (st->time_next_delayed_flow > 0)
-		fprintf(f, ", next packet delay %llu ns", st->time_next_delayed_flow);
+	/* timeslot statistics */
+	fprintf(f, "\n  at timeslot %llu", st->current_timeslot);
+	fprintf(f, ", mask %llx", st->horizon_mask);
+	fprintf(f, ", %llu successful", st->used_timeslots);
+	fprintf(f, ", %llu missed", st->missed_timeslots);
+	fprintf(f, ", %llu unrequested", st->unrequested_tslots);
 
-	fprintf(f, "\n  %llu gc, %llu highprio",
-		st->gc_flows, st->highprio_packets);
-
-	if (st->tcp_retrans)
-		fprintf(f, ", %llu retrans", st->tcp_retrans);
-
-	fprintf(f, ", %llu throttled", st->throttled);
-
+	/* packet statistics */
+	fprintf(f, "\n  %llu highprio", st->highprio_packets);
 	if (st->flows_plimit)
 		fprintf(f, ", %llu flows_plimit", st->flows_plimit);
+	if (st->time_next_request > 0)
+		fprintf(f, ", next request %llu ns", st->time_next_request);
 
-	if (st->pkts_too_long || st->allocation_errors)
-		fprintf(f, "\n  %llu too long pkts, %llu alloc errors\n",
-			st->pkts_too_long, st->allocation_errors);
+	/* other error statistics */
+	if (st->allocation_errors)
+		fprintf(f, "\n  %llu alloc errors\n", st->allocation_errors);
 
 	return 0;
 }

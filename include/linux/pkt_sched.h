@@ -790,42 +790,33 @@ struct tc_fq_qd_stats {
 /* FastPass */
 
 enum {
-	TCA_FP_UNSPEC,
-
-	TCA_FP_PLIMIT,		/* limit of total number of packets in queue */
-
-	TCA_FP_FLOW_PLIMIT,	/* limit of packets per flow */
-
-	TCA_FP_QUANTUM,		/* RR quantum */
-
-	TCA_FP_INITIAL_QUANTUM,		/* RR quantum for new flow */
-
-	TCA_FP_RATE_ENABLE,	/* enable/disable rate limiting */
-
-	TCA_FP_FLOW_DEFAULT_RATE,/* for sockets with unspecified sk_rate,
-				  * use the following rate
-				  */
-
-	TCA_FP_FLOW_MAX_RATE,	/* per flow max rate */
-
-	TCA_FP_BUCKETS_LOG,	/* log2(number of buckets) */
-	__TCA_FP_MAX
+	TCA_FASTPASS_UNSPEC,
+	TCA_FASTPASS_PLIMIT,		/* limit of total number of packets in queue */
+	TCA_FASTPASS_FLOW_PLIMIT,	/* limit of packets per flow */
+	TCA_FASTPASS_BUCKETS_LOG,	/* log2(number of buckets) */
+	TCA_FASTPASS_DATA_RATE,		/* max rate of data packets (bps)*/
+	TCA_FASTPASS_TIMESLOT_NSEC,	/* duration of each timeslot, in nanoseconds */
+	TCA_FASTPASS_REQUEST_COST,	/* average time between requests (ns) */
+	TCA_FASTPASS_REQUEST_BUCKET,/* max burst credit (in ns) for requests */
+	TCA_FASTPASS_REQUEST_GAP,	/* minimum gap between requests (in ns) */
+	__TCA_FASTPASS_MAX
 };
 
-#define TCA_FP_MAX	(__TCA_FP_MAX - 1)
+#define TCA_FASTPASS_MAX	(__TCA_FASTPASS_MAX - 1)
 
 struct tc_fastpass_qd_stats {
 	__u64	gc_flows;
 	__u64	highprio_packets;
-	__u64	tcp_retrans;
-	__u64	throttled;
 	__u64	flows_plimit;
-	__u64	pkts_too_long;
 	__u64	allocation_errors;
-	__s64	time_next_delayed_flow;
+	__u64	missed_timeslots;
+	__u64	used_timeslots;
+	__u64	current_timeslot;
+	__u64	horizon_mask;
+	__u64	time_next_request;
 	__u32	flows;
 	__u32	inactive_flows;
-	__u32	throttled_flows;
-	__u32	pad;
+	__u32	unrequested_flows;
+	__u32	unrequested_tslots;
 };
 #endif
