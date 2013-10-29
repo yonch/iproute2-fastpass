@@ -108,7 +108,7 @@ static int fastpass_parse_opt(struct qdisc_util *qu, int argc, char **argv,
 			}
 		} else if (strcmp(*argv, "timeslot") == 0) {
 			NEXT_ARG();
-			if (get_unsigned(&tslot_len, *argv)) {
+			if (get_unsigned(&tslot_len, *argv, 0)) {
 				fprintf(stderr, "Illegal \"timeslot\"\n");
 				return -1;
 			}
@@ -175,7 +175,7 @@ static int fastpass_parse_opt(struct qdisc_util *qu, int argc, char **argv,
 
 static int fastpass_print_opt(struct qdisc_util *qu, FILE *f, struct rtattr *opt)
 {
-	struct rtattr *tb[TCA_FP_MAX + 1];
+	struct rtattr *tb[TCA_FASTPASS_MAX + 1];
 	unsigned int plimit, flow_plimit;
 	unsigned int buckets_log;
 	unsigned int data_rate;
@@ -188,7 +188,7 @@ static int fastpass_print_opt(struct qdisc_util *qu, FILE *f, struct rtattr *opt
 	if (opt == NULL)
 		return 0;
 
-	parse_rtattr_nested(tb, TCA_FP_MAX, opt);
+	parse_rtattr_nested(tb, TCA_FASTPASS_MAX, opt);
 
 	if (tb[TCA_FASTPASS_PLIMIT] &&
 	    RTA_PAYLOAD(tb[TCA_FASTPASS_PLIMIT]) >= sizeof(__u32)) {
@@ -257,7 +257,7 @@ static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 	fprintf(f, ", mask %llx", st->horizon_mask);
 	fprintf(f, ", %llu successful", st->used_timeslots);
 	fprintf(f, ", %llu missed", st->missed_timeslots);
-	fprintf(f, ", %llu unrequested", st->unrequested_tslots);
+	fprintf(f, ", %u unrequested", st->unrequested_tslots);
 
 	/* packet statistics */
 	fprintf(f, "\n  %llu highprio", st->highprio_packets);
