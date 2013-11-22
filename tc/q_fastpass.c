@@ -263,6 +263,7 @@ static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 	fprintf(f, "\n  %llu highprio", st->highprio_packets);
 	if (st->flows_plimit)
 		fprintf(f, ", %llu flows_plimit", st->flows_plimit);
+	fprintf(f, ", %llu requests", st->requests);
 	if (st->time_next_request > 0)
 		fprintf(f, ", next request %llu ns", st->time_next_request);
 

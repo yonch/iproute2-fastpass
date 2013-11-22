@@ -814,6 +814,7 @@ struct tc_fastpass_qd_stats {
 	__u64	current_timeslot;
 	__u64	horizon_mask;
 	__u64	time_next_request;
+	__u64	requests;
 	__u32	flows;
 	__u32	inactive_flows;
 	__u32	unrequested_flows;
