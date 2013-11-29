@@ -54,6 +54,7 @@ static void explain(void)
 	fprintf(stderr, "              [ buckets NUMBER ] [ rate RATE ]\n");
 	fprintf(stderr, "              [ timeslot NSECS  ] [ req_cost NSEC ]\n");
 	fprintf(stderr, "              [ req_bucket NSEC ] [ req_gap NSEC ]\n");
+	fprintf(stderr, "              [ ctrl IPADDR ]\n");
 }
 
 static unsigned int ilog2(unsigned int val)
@@ -79,6 +80,9 @@ static int fastpass_parse_opt(struct qdisc_util *qu, int argc, char **argv,
 	unsigned int req_cost = ~0U;
 	unsigned int req_bucketlen = ~0U;
 	unsigned int req_min_gap = ~0U;
+	inet_prefix ctrl_addr;
+	int has_addr = 0;
+
 	struct rtattr *tail;
 
 	while (argc > 0) {
@@ -130,6 +134,13 @@ static int fastpass_parse_opt(struct qdisc_util *qu, int argc, char **argv,
 				fprintf(stderr, "Illegal \"req_gap\"\n");
 				return -1;
 			}
+		} else if (strcmp(*argv, "ctrl") == 0) {
+			NEXT_ARG();
+			if (get_addr_1(&ctrl_addr, *argv, AF_INET) < 0) {
+				fprintf(stderr, "Illegal \"ctrl\"\n");
+				return -1;
+			}
+			has_addr = 1;
 		} else if (strcmp(*argv, "help") == 0) {
 			explain();
 			return -1;
@@ -169,6 +180,10 @@ static int fastpass_parse_opt(struct qdisc_util *qu, int argc, char **argv,
 	if (req_min_gap != ~0U)
 		addattr_l(n, 1024, TCA_FASTPASS_REQUEST_GAP,
 			  &req_min_gap, sizeof(req_min_gap));
+	if (has_addr != 0)
+		addattr_l(n, 1024, TCA_FASTPASS_CONTROLLER_IP,
+			  &ctrl_addr.data[0], sizeof(__u32));
+
 	tail->rta_len = (void *) NLMSG_TAIL(n) - (void *) tail;
 	return 0;
 }
@@ -183,6 +198,7 @@ static int fastpass_print_opt(struct qdisc_util *qu, FILE *f, struct rtattr *opt
 	unsigned int req_cost;
 	unsigned int req_bucketlen;
 	unsigned int req_min_gap;
+	struct in_addr ctrl_ip_addr;
 	SPRINT_BUF(b1);
 
 	if (opt == NULL)
@@ -230,6 +246,11 @@ static int fastpass_print_opt(struct qdisc_util *qu, FILE *f, struct rtattr *opt
 		req_min_gap = rta_getattr_u32(tb[TCA_FASTPASS_REQUEST_GAP]);
 		fprintf(f, "req_gap %u ", req_min_gap);
 	}
+	if (tb[TCA_FASTPASS_CONTROLLER_IP] &&
+	    RTA_PAYLOAD(tb[TCA_FASTPASS_CONTROLLER_IP]) >= sizeof(__u32)) {
+		ctrl_ip_addr.s_addr = rta_getattr_u32(tb[TCA_FASTPASS_CONTROLLER_IP]);
+		fprintf(f, "ctrl %s ", inet_ntoa(ctrl_ip_addr));
+	}
 
 	return 0;
 }
@@ -270,6 +291,8 @@ static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 	/* other error statistics */
 	if (st->allocation_errors)
 		fprintf(f, "\n  %llu alloc errors\n", st->allocation_errors);
+	if (st->classify_errors)
+		fprintf(f, "\n  %llu classify errors\n", st->classify_errors);
 
 	return 0;
 }

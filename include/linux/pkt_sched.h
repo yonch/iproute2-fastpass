@@ -799,6 +799,7 @@ enum {
 	TCA_FASTPASS_REQUEST_COST,	/* average time between requests (ns) */
 	TCA_FASTPASS_REQUEST_BUCKET,/* max burst credit (in ns) for requests */
 	TCA_FASTPASS_REQUEST_GAP,	/* minimum gap between requests (in ns) */
+	TCA_FASTPASS_CONTROLLER_IP,	/* controller IP, in network byte order */
 	__TCA_FASTPASS_MAX
 };
 
@@ -815,6 +816,7 @@ struct tc_fastpass_qd_stats {
 	__u64	horizon_mask;
 	__u64	time_next_request;
 	__u64	requests;
+	__u64	classify_errors;
 	__u32	flows;
 	__u32	inactive_flows;
 	__u32	unrequested_flows;
