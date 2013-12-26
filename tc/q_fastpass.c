@@ -48,6 +48,8 @@
 #include "utils.h"
 #include "tc_util.h"
 
+#include "/home/yonch/fastpass/src/kernel-mod/fp_statistics.h"
+
 static void explain(void)
 {
 	fprintf(stderr, "Usage: ... fastpass [ limit PACKETS ] [ flow_limit PACKETS ]\n");
@@ -259,6 +261,8 @@ static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 			   struct rtattr *xstats)
 {
 	struct tc_fastpass_qd_stats *st;
+	struct fp_sched_stat *scs;
+	struct fp_socket_stat *sks;
 
 	if (xstats == NULL)
 		return 0;
@@ -268,32 +272,138 @@ static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 
 	st = RTA_DATA(xstats);
 
+	if (st->version != FASTPASS_STAT_VERSION) {
+		fprintf(f, "  unknown version number %d, expected %d\n",
+			st->version, FASTPASS_STAT_VERSION);
+		return -1;
+	}
+
+	scs = (struct fp_sched_stat *)&st->sched_stats[0];
+	sks = (struct fp_socket_stat *)&st->socket_stats[0];
+
+	/* time */
+	fprintf(f, "  timestamp 0x%llX ", st->stat_timestamp);
+	fprintf(f, ", timeslot 0x%llX", st->current_timeslot);
+
+	fprintf(f, "\n  in_sync=%d", st->in_sync);
+
 	/* flow statistics */
-	fprintf(f, "  %u flows (%u inactive, %u unrequested)",
-		st->flows, st->inactive_flows, st->unrequested_flows);
-	fprintf(f, ", %llu gc", st->gc_flows);
+	fprintf(f, "\n  %u flows (%u inactive, %u unrequested)",
+		st->flows, st->inactive_flows, st->n_unreq_flows);
+	fprintf(f, ", %llu gc", scs->gc_flows);
 
 	/* timeslot statistics */
-	fprintf(f, "\n  at timeslot %llu", st->current_timeslot);
-	fprintf(f, ", mask %llx", st->horizon_mask);
-	fprintf(f, ", %llu successful", st->used_timeslots);
-	fprintf(f, ", %llu missed", st->missed_timeslots);
-	fprintf(f, ", %u unrequested", st->unrequested_tslots);
+	fprintf(f, "\n  horizon mask 0x%016llx", st->horizon_mask);
+	fprintf(f, ", %llu successful timeslots", scs->used_timeslots);
+	fprintf(f, ", %llu missed", scs->missed_timeslots);
+	fprintf(f, ", %llu late", scs->alloc_too_late);
+	fprintf(f, ", %llu premature", scs->alloc_premature);
+	fprintf(f, ", %llu unrequested", st->demand_tslots - st->requested_tslots);
 
-	/* packet statistics */
-	fprintf(f, "\n  %llu highprio", st->highprio_packets);
-	if (st->flows_plimit)
-		fprintf(f, ", %llu flows_plimit", st->flows_plimit);
-	fprintf(f, ", %llu requests", st->requests);
-	if (st->time_next_request > 0)
-		fprintf(f, ", next request %llu ns", st->time_next_request);
+	/* total since reset */
+	fprintf(f, "\n  since reset at 0x%llX: ", st->last_reset_time);
+	fprintf(f, " demand %llu", st->demand_tslots);
+	fprintf(f, ", requested %llu", st->requested_tslots);
+	fprintf(f, ", acked %llu", st->acked_tslots);
+	fprintf(f, ", allocated %llu", st->alloc_tslots);
 
-	/* other error statistics */
-	if (st->allocation_errors)
-		fprintf(f, "\n  %llu alloc errors\n", st->allocation_errors);
-	if (st->classify_errors)
-		fprintf(f, "\n  %llu classify errors\n", st->classify_errors);
+	/* protocol state */
+	fprintf(f, "\n  ingress_seq 0x%llX", st->in_max_seqno);
+	fprintf(f, ", inwnd 0x%016llX", st->inwnd);
+	fprintf(f, ", consecutive bad %d", st->consecutive_bad_pkts);
 
+	/* egress packet statistics */
+	fprintf(f, "\n  enqueued %llu ctrl", scs->ctrl_pkts);
+	fprintf(f, ", %llu non_ctrl_highprio", scs->non_ctrl_highprio_pkts);
+	fprintf(f, ", %llu ntp", scs->ntp_pkts);
+	fprintf(f, ", %llu arp", scs->arp_pkts);
+	fprintf(f, ", %llu data", scs->data_pkts);
+	fprintf(f, ", %llu flow_plimit", scs->flows_plimit);
+
+	/* requests */
+	fprintf(f, "\n  %llu tx requests", scs->requests);
+	fprintf(f, " (%llu acked, %llu timeout, %llu fell off)", sks->acked_packets,
+			sks->timeout_pkts, sks->fall_off_outwnd);
+	fprintf(f, ", %llu w/no a-req", scs->request_with_empty_flowqueue);
+	fprintf(f, ", %llu timeouts", sks->tasklet_runs);
+	fprintf(f, ", %llu timer_sets", sks->reprogrammed_timer);
+
+	fprintf(f, "\n  %llu ack payloads", sks->ack_payloads);
+	fprintf(f, " (%llu w/new info)", sks->informative_ack_payloads);
+	fprintf(f, ", %d currently unacked", st->tx_num_unacked);
+
+	fprintf(f, "\n  egress_seq 0x%llX", st->out_max_seqno);
+	fprintf(f, ", earliest_unacked 0x%llX", st->earliest_unacked);
+	fprintf(f, ", next request %llu ns", st->time_next_request);
+
+	/* ingress from controller */
+	fprintf(f, "\n  %llu rx ctrl pkts", sks->rx_pkts);
+	fprintf(f, " (%llu out-of-order)", sks->rx_out_of_order);
+	fprintf(f, "\n  %llu reset payloads", sks->reset_payloads);
+	fprintf(f, " (%llu redundant, %llu out-of-window, %llu outdated)",
+			sks->redundant_reset, sks->reset_out_of_window, sks->outdated_reset);
+	/* executed resets */
+	fprintf(f, ", %llu resets", sks->proto_resets);
+	fprintf(f, " (%llu due to bad pkts)", sks->reset_from_bad_pkts);
+	fprintf(f, ", %llu no reset from bad pkts", sks->no_reset_because_recent);
+
+	/* error statistics */
+	fprintf(f, "\n errors:");
+	if (scs->allocation_errors)
+		fprintf(f, "\n    %llu allocation errors in fp_classify", scs->allocation_errors);
+	if (scs->classify_errors)
+		fprintf(f, "\n    %llu packets could not be classified", scs->classify_errors);
+	if (scs->flow_not_found_update)
+		fprintf(f, "\n    %llu flow could not be found in update_current_tslot!",
+				scs->flow_not_found_update);
+	if (scs->req_alloc_errors)
+		fprintf(f, "\n    %llu could not allocate pkt_desc for request", scs->req_alloc_errors);
+	if (scs->flow_not_found_oob)
+		fprintf(f, "\n    %llu flow could not be found in handle_out_of_bounds_allocation!",
+				scs->flow_not_found_oob);
+	if (sks->skb_alloc_error)
+		fprintf(f, "\n    %llu control packets failed to allocate skb",
+				sks->skb_alloc_error);
+	if (sks->xmit_errors)
+		fprintf(f, "\n    %llu control packets had errors traversing the IP stack",
+				sks->xmit_errors);
+	if (sks->rx_too_short)
+		fprintf(f, "\n    %llu rx control packets too short", sks->rx_too_short);
+	if (sks->rx_unknown_payload)
+		fprintf(f, "\n    %llu rx control packets with unknown payload", sks->rx_unknown_payload);
+	if (sks->rx_incomplete_reset)
+		fprintf(f, "\n    %llu rx incomplete RESET payload", sks->rx_incomplete_reset);
+	if (sks->rx_incomplete_alloc)
+		fprintf(f, "\n    %llu rx incomplete ALLOC payload", sks->rx_incomplete_alloc);
+	if (sks->rx_incomplete_ack)
+		fprintf(f, "\n    %llu rx incomplete ACK payload", sks->rx_incomplete_ack);
+
+	/* warnings */
+	fprintf(f, "\n warnings:");
+	if (scs->queued_flow_already_acked)
+		fprintf(f, "\n    %llu acked flows in flowqueue (possible ack just after timeout)",
+				scs->queued_flow_already_acked);
+	if (scs->unwanted_alloc)
+		fprintf(f, "\n    %llu timeslots allocated beyond the demand of the flow (could happen due to reset)",
+				scs->unwanted_alloc);
+	if (sks->too_early_ack)
+		fprintf(f, "\n    %llu acks were so late the seq was before the window",
+				sks->too_early_ack);
+	if (sks->fall_off_outwnd)
+		fprintf(f, "\n    %llu packets dropped off egress window before their timeout (window too short? unreliable timeout?)",
+				sks->fall_off_outwnd);
+	if (sks->rx_dup_pkt)
+		fprintf(f, "\n    %llu rx duplicate packets detected", sks->rx_dup_pkt);
+	if (sks->rx_checksum_error)
+		fprintf(f, "\n    %llu rx checksum failures", sks->rx_checksum_error);
+	if (sks->inwnd_jumped)
+		fprintf(f, "\n    %llu inwnd jumped by >=64", sks->inwnd_jumped);
+	if (sks->seqno_before_inwnd)
+		fprintf(f, "\n    %llu major reordering events", sks->seqno_before_inwnd);
+
+
+	fprintf(f, "\n done");
+	fprintf(f, "\n");
 	return 0;
 }
 

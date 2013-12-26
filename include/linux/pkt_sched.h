@@ -800,26 +800,39 @@ enum {
 	TCA_FASTPASS_REQUEST_BUCKET,/* max burst credit (in ns) for requests */
 	TCA_FASTPASS_REQUEST_GAP,	/* minimum gap between requests (in ns) */
 	TCA_FASTPASS_CONTROLLER_IP,	/* controller IP, in network byte order */
+	TCA_FASTPASS_RST_WIN_USEC, /* time window to accept resets, in usec */
 	__TCA_FASTPASS_MAX
 };
 
 #define TCA_FASTPASS_MAX	(__TCA_FASTPASS_MAX - 1)
 
+#define TC_FASTPASS_SCHED_STAT_MAX_BYTES (25 * sizeof(__u64))
+#define TC_FASTPASS_SOCKET_STAT_MAX_BYTES (30 * sizeof(__u64))
+
 struct tc_fastpass_qd_stats {
-	__u64	gc_flows;
-	__u64	highprio_packets;
-	__u64	flows_plimit;
-	__u64	allocation_errors;
-	__u64	missed_timeslots;
-	__u64	used_timeslots;
+	__u32	version;
+	__u32	flows;
+	__u32	inactive_flows;
+	__u32	n_unreq_flows;
+	__u64	stat_timestamp;
 	__u64	current_timeslot;
 	__u64	horizon_mask;
 	__u64	time_next_request;
-	__u64	requests;
-	__u64	classify_errors;
-	__u32	flows;
-	__u32	inactive_flows;
-	__u32	unrequested_flows;
-	__u32	unrequested_tslots;
+	__u64	demand_tslots;
+	__u64	requested_tslots;
+	__u64	alloc_tslots;
+	__u64	acked_tslots;
+
+	__u64	last_reset_time;
+	__u64	out_max_seqno;
+	__u64	in_max_seqno;
+	__u32	in_sync:1;
+	__u16	consecutive_bad_pkts;
+	__u16	tx_num_unacked;
+	__u64	earliest_unacked;
+	__u64	inwnd;
+
+	__u8	sched_stats[TC_FASTPASS_SCHED_STAT_MAX_BYTES];
+	__u8	socket_stats[TC_FASTPASS_SOCKET_STAT_MAX_BYTES];
 };
 #endif
