@@ -350,56 +350,56 @@ static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 	/* error statistics */
 	fprintf(f, "\n errors:");
 	if (scs->allocation_errors)
-		fprintf(f, "\n    %llu allocation errors in fp_classify", scs->allocation_errors);
+		fprintf(f, "\n  %llu allocation errors in fp_classify", scs->allocation_errors);
 	if (scs->classify_errors)
-		fprintf(f, "\n    %llu packets could not be classified", scs->classify_errors);
+		fprintf(f, "\n  %llu packets could not be classified", scs->classify_errors);
 	if (scs->flow_not_found_update)
-		fprintf(f, "\n    %llu flow could not be found in update_current_tslot!",
+		fprintf(f, "\n  %llu flow could not be found in update_current_tslot!",
 				scs->flow_not_found_update);
 	if (scs->req_alloc_errors)
-		fprintf(f, "\n    %llu could not allocate pkt_desc for request", scs->req_alloc_errors);
+		fprintf(f, "\n  %llu could not allocate pkt_desc for request", scs->req_alloc_errors);
 	if (scs->flow_not_found_oob)
-		fprintf(f, "\n    %llu flow could not be found in handle_out_of_bounds_allocation!",
+		fprintf(f, "\n  %llu flow could not be found in handle_out_of_bounds_allocation!",
 				scs->flow_not_found_oob);
 	if (sks->skb_alloc_error)
-		fprintf(f, "\n    %llu control packets failed to allocate skb",
+		fprintf(f, "\n  %llu control packets failed to allocate skb",
 				sks->skb_alloc_error);
 	if (sks->xmit_errors)
-		fprintf(f, "\n    %llu control packets had errors traversing the IP stack",
+		fprintf(f, "\n  %llu control packets had errors traversing the IP stack",
 				sks->xmit_errors);
 	if (sks->rx_too_short)
-		fprintf(f, "\n    %llu rx control packets too short", sks->rx_too_short);
+		fprintf(f, "\n  %llu rx control packets too short", sks->rx_too_short);
 	if (sks->rx_unknown_payload)
-		fprintf(f, "\n    %llu rx control packets with unknown payload", sks->rx_unknown_payload);
+		fprintf(f, "\n  %llu rx control packets with unknown payload", sks->rx_unknown_payload);
 	if (sks->rx_incomplete_reset)
-		fprintf(f, "\n    %llu rx incomplete RESET payload", sks->rx_incomplete_reset);
+		fprintf(f, "\n  %llu rx incomplete RESET payload", sks->rx_incomplete_reset);
 	if (sks->rx_incomplete_alloc)
-		fprintf(f, "\n    %llu rx incomplete ALLOC payload", sks->rx_incomplete_alloc);
+		fprintf(f, "\n  %llu rx incomplete ALLOC payload", sks->rx_incomplete_alloc);
 	if (sks->rx_incomplete_ack)
-		fprintf(f, "\n    %llu rx incomplete ACK payload", sks->rx_incomplete_ack);
+		fprintf(f, "\n  %llu rx incomplete ACK payload", sks->rx_incomplete_ack);
 
 	/* warnings */
 	fprintf(f, "\n warnings:");
 	if (scs->queued_flow_already_acked)
-		fprintf(f, "\n    %llu acked flows in flowqueue (possible ack just after timeout)",
+		fprintf(f, "\n  %llu acked flows in flowqueue (possible ack just after timeout)",
 				scs->queued_flow_already_acked);
 	if (scs->unwanted_alloc)
-		fprintf(f, "\n    %llu timeslots allocated beyond the demand of the flow (could happen due to reset)",
+		fprintf(f, "\n  %llu timeslots allocated beyond the demand of the flow (could happen due to reset)",
 				scs->unwanted_alloc);
 	if (sks->too_early_ack)
-		fprintf(f, "\n    %llu acks were so late the seq was before the window",
+		fprintf(f, "\n  %llu acks were so late the seq was before the window",
 				sks->too_early_ack);
 	if (sks->fall_off_outwnd)
-		fprintf(f, "\n    %llu packets dropped off egress window before their timeout (window too short? unreliable timeout?)",
+		fprintf(f, "\n  %llu packets dropped off egress window before their timeout (window too short? unreliable timeout?)",
 				sks->fall_off_outwnd);
 	if (sks->rx_dup_pkt)
-		fprintf(f, "\n    %llu rx duplicate packets detected", sks->rx_dup_pkt);
+		fprintf(f, "\n  %llu rx duplicate packets detected", sks->rx_dup_pkt);
 	if (sks->rx_checksum_error)
-		fprintf(f, "\n    %llu rx checksum failures", sks->rx_checksum_error);
+		fprintf(f, "\n  %llu rx checksum failures", sks->rx_checksum_error);
 	if (sks->inwnd_jumped)
-		fprintf(f, "\n    %llu inwnd jumped by >=64", sks->inwnd_jumped);
+		fprintf(f, "\n  %llu inwnd jumped by >=64", sks->inwnd_jumped);
 	if (sks->seqno_before_inwnd)
-		fprintf(f, "\n    %llu major reordering events", sks->seqno_before_inwnd);
+		fprintf(f, "\n  %llu major reordering events", sks->seqno_before_inwnd);
 
 
 	fprintf(f, "\n done");
