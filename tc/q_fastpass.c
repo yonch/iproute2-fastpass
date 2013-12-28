@@ -263,6 +263,7 @@ static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 	struct tc_fastpass_qd_stats *st;
 	struct fp_sched_stat *scs;
 	struct fp_socket_stat *sks;
+	struct fp_proto_stat *sps;
 
 	if (xstats == NULL)
 		return 0;
@@ -280,6 +281,7 @@ static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 
 	scs = (struct fp_sched_stat *)&st->sched_stats[0];
 	sks = (struct fp_socket_stat *)&st->socket_stats[0];
+	sps = (struct fp_proto_stat *)&st->proto_stats[0];
 
 	/* time */
 	fprintf(f, "  timestamp 0x%llX ", st->stat_timestamp);
@@ -322,14 +324,14 @@ static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 
 	/* requests */
 	fprintf(f, "\n  %llu tx requests", scs->requests);
-	fprintf(f, " (%llu acked, %llu timeout, %llu fell off)", sks->acked_packets,
-			sks->timeout_pkts, sks->fall_off_outwnd);
+	fprintf(f, " (%llu acked, %llu timeout, %llu fell off)", sps->acked_packets,
+			sps->timeout_pkts, sps->fall_off_outwnd);
 	fprintf(f, ", %llu w/no a-req", scs->request_with_empty_flowqueue);
-	fprintf(f, ", %llu timeouts", sks->tasklet_runs);
-	fprintf(f, ", %llu timer_sets", sks->reprogrammed_timer);
+	fprintf(f, ", %llu timeouts", sps->tasklet_runs);
+	fprintf(f, ", %llu timer_sets", sps->reprogrammed_timer);
 
-	fprintf(f, "\n  %llu ack payloads", sks->ack_payloads);
-	fprintf(f, " (%llu w/new info)", sks->informative_ack_payloads);
+	fprintf(f, "\n  %llu ack payloads", sps->ack_payloads);
+	fprintf(f, " (%llu w/new info)", sps->informative_ack_payloads);
 	fprintf(f, ", %d currently unacked", st->tx_num_unacked);
 
 	fprintf(f, "\n  egress_seq 0x%llX", st->out_max_seqno);
@@ -337,15 +339,15 @@ static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 	fprintf(f, ", next request %llu ns", st->time_next_request);
 
 	/* ingress from controller */
-	fprintf(f, "\n  %llu rx ctrl pkts", sks->rx_pkts);
-	fprintf(f, " (%llu out-of-order)", sks->rx_out_of_order);
-	fprintf(f, "\n  %llu reset payloads", sks->reset_payloads);
+	fprintf(f, "\n  %llu rx ctrl pkts", sps->rx_pkts);
+	fprintf(f, " (%llu out-of-order)", sps->rx_out_of_order);
+	fprintf(f, "\n  %llu reset payloads", sps->reset_payloads);
 	fprintf(f, " (%llu redundant, %llu out-of-window, %llu outdated)",
-			sks->redundant_reset, sks->reset_out_of_window, sks->outdated_reset);
+			sps->redundant_reset, sps->reset_out_of_window, sps->outdated_reset);
 	/* executed resets */
-	fprintf(f, ", %llu resets", sks->proto_resets);
-	fprintf(f, " (%llu due to bad pkts)", sks->reset_from_bad_pkts);
-	fprintf(f, ", %llu no reset from bad pkts", sks->no_reset_because_recent);
+	fprintf(f, ", %llu resets", sps->proto_resets);
+	fprintf(f, " (%llu due to bad pkts)", sps->reset_from_bad_pkts);
+	fprintf(f, ", %llu no reset from bad pkts", sps->no_reset_because_recent);
 
 	/* error statistics */
 	fprintf(f, "\n errors:");
@@ -367,16 +369,19 @@ static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 	if (sks->xmit_errors)
 		fprintf(f, "\n  %llu control packets had errors traversing the IP stack",
 				sks->xmit_errors);
-	if (sks->rx_too_short)
-		fprintf(f, "\n  %llu rx control packets too short", sks->rx_too_short);
-	if (sks->rx_unknown_payload)
-		fprintf(f, "\n  %llu rx control packets with unknown payload", sks->rx_unknown_payload);
-	if (sks->rx_incomplete_reset)
-		fprintf(f, "\n  %llu rx incomplete RESET payload", sks->rx_incomplete_reset);
-	if (sks->rx_incomplete_alloc)
-		fprintf(f, "\n  %llu rx incomplete ALLOC payload", sks->rx_incomplete_alloc);
-	if (sks->rx_incomplete_ack)
-		fprintf(f, "\n  %llu rx incomplete ACK payload", sks->rx_incomplete_ack);
+	if (sks->rx_fragmented)
+		fprintf(f, "\n  %llu received a fragmented skb (no current support)",
+				sks->rx_fragmented);
+	if (sps->rx_too_short)
+		fprintf(f, "\n  %llu rx control packets too short", sps->rx_too_short);
+	if (sps->rx_unknown_payload)
+		fprintf(f, "\n  %llu rx control packets with unknown payload", sps->rx_unknown_payload);
+	if (sps->rx_incomplete_reset)
+		fprintf(f, "\n  %llu rx incomplete RESET payload", sps->rx_incomplete_reset);
+	if (sps->rx_incomplete_alloc)
+		fprintf(f, "\n  %llu rx incomplete ALLOC payload", sps->rx_incomplete_alloc);
+	if (sps->rx_incomplete_ack)
+		fprintf(f, "\n  %llu rx incomplete ACK payload", sps->rx_incomplete_ack);
 
 	/* warnings */
 	fprintf(f, "\n warnings:");
@@ -386,20 +391,20 @@ static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 	if (scs->unwanted_alloc)
 		fprintf(f, "\n  %llu timeslots allocated beyond the demand of the flow (could happen due to reset)",
 				scs->unwanted_alloc);
-	if (sks->too_early_ack)
+	if (sps->too_early_ack)
 		fprintf(f, "\n  %llu acks were so late the seq was before the window",
-				sks->too_early_ack);
-	if (sks->fall_off_outwnd)
+				sps->too_early_ack);
+	if (sps->fall_off_outwnd)
 		fprintf(f, "\n  %llu packets dropped off egress window before their timeout (window too short? unreliable timeout?)",
-				sks->fall_off_outwnd);
-	if (sks->rx_dup_pkt)
-		fprintf(f, "\n  %llu rx duplicate packets detected", sks->rx_dup_pkt);
-	if (sks->rx_checksum_error)
-		fprintf(f, "\n  %llu rx checksum failures", sks->rx_checksum_error);
-	if (sks->inwnd_jumped)
-		fprintf(f, "\n  %llu inwnd jumped by >=64", sks->inwnd_jumped);
-	if (sks->seqno_before_inwnd)
-		fprintf(f, "\n  %llu major reordering events", sks->seqno_before_inwnd);
+				sps->fall_off_outwnd);
+	if (sps->rx_dup_pkt)
+		fprintf(f, "\n  %llu rx duplicate packets detected", sps->rx_dup_pkt);
+	if (sps->rx_checksum_error)
+		fprintf(f, "\n  %llu rx checksum failures", sps->rx_checksum_error);
+	if (sps->inwnd_jumped)
+		fprintf(f, "\n  %llu inwnd jumped by >=64", sps->inwnd_jumped);
+	if (sps->seqno_before_inwnd)
+		fprintf(f, "\n  %llu major reordering events", sps->seqno_before_inwnd);
 
 
 	fprintf(f, "\n done");

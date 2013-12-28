@@ -807,7 +807,8 @@ enum {
 #define TCA_FASTPASS_MAX	(__TCA_FASTPASS_MAX - 1)
 
 #define TC_FASTPASS_SCHED_STAT_MAX_BYTES (25 * sizeof(__u64))
-#define TC_FASTPASS_SOCKET_STAT_MAX_BYTES (30 * sizeof(__u64))
+#define TC_FASTPASS_SOCKET_STAT_MAX_BYTES (8 * sizeof(__u64))
+#define TC_FASTPASS_PROTO_STAT_MAX_BYTES (30 * sizeof(__u64))
 
 struct tc_fastpass_qd_stats {
 	__u32	version;
@@ -834,5 +835,6 @@ struct tc_fastpass_qd_stats {
 
 	__u8	sched_stats[TC_FASTPASS_SCHED_STAT_MAX_BYTES];
 	__u8	socket_stats[TC_FASTPASS_SOCKET_STAT_MAX_BYTES];
+	__u8	proto_stats[TC_FASTPASS_PROTO_STAT_MAX_BYTES];
 };
 #endif
