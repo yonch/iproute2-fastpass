@@ -279,12 +279,14 @@ static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 		return -1;
 	}
 
+
 	scs = (struct fp_sched_stat *)&st->sched_stats[0];
 	sks = (struct fp_socket_stat *)&st->socket_stats[0];
 	sps = (struct fp_proto_stat *)&st->proto_stats[0];
 
 	/* time */
-	fprintf(f, "  timestamp 0x%llX ", st->stat_timestamp);
+	fprintf(f, "  stat version %u ", st->version);
+	fprintf(f, ", timestamp 0x%llX ", st->stat_timestamp);
 	fprintf(f, ", timeslot 0x%llX", st->current_timeslot);
 
 	fprintf(f, "\n  in_sync=%d", st->in_sync);
@@ -342,10 +344,15 @@ static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 	fprintf(f, "\n  %llu rx ctrl pkts", sps->rx_pkts);
 	fprintf(f, " (%llu out-of-order)", sps->rx_out_of_order);
 	fprintf(f, "\n  %llu reset payloads", sps->reset_payloads);
-	fprintf(f, " (%llu redundant, %llu out-of-window, %llu outdated)",
-			sps->redundant_reset, sps->reset_out_of_window, sps->outdated_reset);
+	fprintf(f, " (%llu redundant, %llu/%llu both-recent lost/won, %llu old w/recent last, %llu recent w/old last, %llu both-old)",
+			sps->redundant_reset,
+			sps->reset_both_recent_last_reset_wins,
+			sps->reset_both_recent_payload_wins,
+			sps->reset_last_recent_payload_old,
+			sps->reset_last_old_payload_recent,
+			sps->reset_both_old);
 	/* executed resets */
-	fprintf(f, ", %llu resets", sps->proto_resets);
+	fprintf(f, "\n  %llu resets", sps->proto_resets);
 	fprintf(f, " (%llu due to bad pkts)", sps->reset_from_bad_pkts);
 	fprintf(f, ", %llu no reset from bad pkts", sps->no_reset_because_recent);
 
