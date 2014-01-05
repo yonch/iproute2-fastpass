@@ -49,6 +49,7 @@
 #include "tc_util.h"
 
 #include "/home/yonch/fastpass/src/kernel-mod/fp_statistics.h"
+#include "/home/yonch/fastpass/src/protocol/fpproto.h"
 
 static void explain(void)
 {
