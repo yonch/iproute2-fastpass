@@ -354,7 +354,8 @@ static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 			sps->reset_both_old);
 	/* executed resets */
 	fprintf(f, "\n  %llu resets", sps->proto_resets);
-	fprintf(f, " (%llu due to bad pkts)", sps->reset_from_bad_pkts);
+	fprintf(f, " (%llu due to bad pkts, %llu forced)", sps->reset_from_bad_pkts,
+			sps->forced_reset);
 	fprintf(f, ", %llu no reset from bad pkts", sps->no_reset_because_recent);
 
 	/* error statistics */
