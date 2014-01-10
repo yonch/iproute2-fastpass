@@ -390,6 +390,8 @@ static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 		fprintf(f, "\n  %llu rx incomplete ALLOC payload", sps->rx_incomplete_alloc);
 	if (sps->rx_incomplete_ack)
 		fprintf(f, "\n  %llu rx incomplete ACK payload", sps->rx_incomplete_ack);
+	if (sps->rx_incomplete_areq)
+		fprintf(f, "\n  %llu rx incomplete A-REQ payload", sps->rx_incomplete_areq);
 
 	/* warnings */
 	fprintf(f, "\n warnings:");
