@@ -48,8 +48,8 @@
 #include "utils.h"
 #include "tc_util.h"
 
-#include "/home/am2/yonch/fastpass/src/kernel-mod/fp_statistics.h"
-#include "/home/am2/yonch/fastpass/src/protocol/fpproto.h"
+#include "kernel-mod/fp_statistics.h"
+#include "protocol/fpproto.h"
 
 static void explain(void)
 {
@@ -275,27 +275,31 @@ static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 	st = RTA_DATA(xstats);
 
 	if (st->version != FASTPASS_STAT_VERSION) {
-		fprintf(f, "  unknown version number %d, expected %d\n",
+		fprintf(f, "  unknown statistics version number %d, expected %d\n",
 			st->version, FASTPASS_STAT_VERSION);
 		return -1;
 	}
 
-
 	scs = (struct fp_sched_stat *)&st->sched_stats[0];
 	sks = (struct fp_socket_stat *)&st->socket_stats[0];
 	sps = (struct fp_proto_stat *)&st->proto_stats[0];
+
+	if (sps->version != FASTPASS_PROTOCOL_STATS_VERSION) {
+		fprintf(f, "  unknown protocol statistics version number %d, expected %d\n",
+			sps->version, FASTPASS_PROTOCOL_STATS_VERSION);
+		return -1;
+	}
 
 	/* time */
 	fprintf(f, "  stat version %u ", st->version);
 	fprintf(f, ", timestamp 0x%llX ", st->stat_timestamp);
 	fprintf(f, ", timeslot 0x%llX", st->current_timeslot);
 
-	fprintf(f, "\n  in_sync=%d", st->in_sync);
-
 	/* flow statistics */
 	fprintf(f, "\n  %u flows (%u inactive, %u unrequested)",
 		st->flows, st->inactive_flows, st->n_unreq_flows);
 	fprintf(f, ", %llu gc", scs->gc_flows);
+	fprintf(f, ", next request in %llu ns", st->time_next_request);
 
 	/* timeslot statistics */
 	fprintf(f, "\n  horizon mask 0x%016llx", st->horizon_mask);
@@ -306,16 +310,11 @@ static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 	fprintf(f, ", %llu unrequested", st->demand_tslots - st->requested_tslots);
 
 	/* total since reset */
-	fprintf(f, "\n  since reset at 0x%llX: ", st->last_reset_time);
+	fprintf(f, "\n  since reset at 0x%llX: ", sps->last_reset_time);
 	fprintf(f, " demand %llu", st->demand_tslots);
 	fprintf(f, ", requested %llu", st->requested_tslots);
 	fprintf(f, ", acked %llu", st->acked_tslots);
 	fprintf(f, ", allocated %llu", st->alloc_tslots);
-
-	/* protocol state */
-	fprintf(f, "\n  ingress_seq 0x%llX", st->in_max_seqno);
-	fprintf(f, ", inwnd 0x%016llX", st->inwnd);
-	fprintf(f, ", consecutive bad %d", st->consecutive_bad_pkts);
 
 	/* egress packet statistics */
 	fprintf(f, "\n  enqueued %llu ctrl", scs->ctrl_pkts);
@@ -325,8 +324,19 @@ static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 	fprintf(f, ", %llu data", scs->data_pkts);
 	fprintf(f, ", %llu flow_plimit", scs->flows_plimit);
 
-	/* requests */
-	fprintf(f, "\n  %llu tx requests", scs->requests);
+	/* protocol state */
+	fprintf(f, "\n  protocol in_sync=%d", sps->in_sync);
+	fprintf(f, "\n  last reset 0x%llX", sps->last_reset_time);
+
+	fprintf(f, "\n  ingress_seq 0x%llX", sps->in_max_seqno);
+	fprintf(f, ", inwnd 0x%016llX", sps->inwnd);
+	fprintf(f, ", consecutive bad %d", sps->consecutive_bad_pkts);
+
+	fprintf(f, "\n  egress_seq 0x%llX", sps->out_max_seqno);
+	fprintf(f, ", earliest_unacked 0x%llX", sps->earliest_unacked);
+
+	/* TX */
+	fprintf(f, "\n  TX %llu ctrl pkts", sps->committed_pkts);
 	fprintf(f, " (%llu acked, %llu timeout, %llu fell off)", sps->acked_packets,
 			sps->timeout_pkts, sps->fall_off_outwnd);
 	fprintf(f, ", %llu w/no a-req", scs->request_with_empty_flowqueue);
@@ -335,16 +345,12 @@ static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 
 	fprintf(f, "\n  %llu ack payloads", sps->ack_payloads);
 	fprintf(f, " (%llu w/new info)", sps->informative_ack_payloads);
-	fprintf(f, ", %d currently unacked", st->tx_num_unacked);
+	fprintf(f, ", %d currently unacked", sps->tx_num_unacked);
 
-	fprintf(f, "\n  egress_seq 0x%llX", st->out_max_seqno);
-	fprintf(f, ", earliest_unacked 0x%llX", st->earliest_unacked);
-	fprintf(f, ", next request %llu ns", st->time_next_request);
-
-	/* ingress from controller */
-	fprintf(f, "\n  %llu rx ctrl pkts", sps->rx_pkts);
+	/* RX */
+	fprintf(f, "\n  RX %llu ctrl pkts", sps->rx_pkts);
 	fprintf(f, " (%llu out-of-order)", sps->rx_out_of_order);
-	fprintf(f, "\n  %llu reset payloads", sps->reset_payloads);
+	fprintf(f, "\n  %llu RX reset payloads", sps->reset_payloads);
 	fprintf(f, " (%llu redundant, %llu/%llu both-recent lost/won, %llu old w/recent last, %llu recent w/old last, %llu both-old)",
 			sps->redundant_reset,
 			sps->reset_both_recent_last_reset_wins,
@@ -353,7 +359,7 @@ static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 			sps->reset_last_old_payload_recent,
 			sps->reset_both_old);
 	/* executed resets */
-	fprintf(f, "\n  %llu resets", sps->proto_resets);
+	fprintf(f, "\n  executed %llu resets", sps->proto_resets);
 	fprintf(f, " (%llu due to bad pkts, %llu forced)", sps->reset_from_bad_pkts,
 			sps->forced_reset);
 	fprintf(f, ", %llu no reset from bad pkts", sps->no_reset_because_recent);
