@@ -415,7 +415,7 @@ static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 	fprintf(f, "\n  %llu requests w/no a-req", scs->request_with_empty_flowqueue);
 
 	/* protocol state */
-	fpproto_print_stats(f, sps);
+	fpproto_print_stats(sps);
 
 	/* error statistics */
 	fprintf(f, "\n errors:");
@@ -440,7 +440,7 @@ static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 	if (sks->rx_fragmented)
 		fprintf(f, "\n  %llu received a fragmented skb (no current support)",
 				sks->rx_fragmented);
-	fpproto_print_errors(f, sps);
+	fpproto_print_errors(sps);
 
 	/* warnings */
 	fprintf(f, "\n warnings:");
@@ -448,10 +448,13 @@ static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 		fprintf(f, "\n  %llu acked flows in flowqueue (possible ack just after timeout)",
 				scs->queued_flow_already_acked);
 	if (scs->unwanted_alloc)
-		fprintf(f, "\n  %llu timeslots allocated beyond the demand of the flow (could happen due to reset)",
+		fprintf(f, "\n  %llu timeslots allocated beyond the demand of the flow (could happen due to reset / controller timeouts)",
 				scs->unwanted_alloc);
+	if (scs->unwanted_out_of_bounds)
+		fprintf(f, "\n  %llu out of bounds timeslots allocated beyond the demand of the flow",
+				scs->unwanted_out_of_bounds);
 
-	fpproto_print_warnings(f, sps);
+	fpproto_print_warnings(sps);
 
 	fprintf(f, "\n done");
 	fprintf(f, "\n");
