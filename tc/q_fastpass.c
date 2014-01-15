@@ -407,6 +407,7 @@ static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 	fprintf(f, "\n  enqueued %llu ctrl", scs->ctrl_pkts);
 	fprintf(f, ", %llu non_ctrl_highprio", scs->non_ctrl_highprio_pkts);
 	fprintf(f, ", %llu ntp", scs->ntp_pkts);
+	fprintf(f, ", %llu ptp", scs->ptp_pkts);
 	fprintf(f, ", %llu arp", scs->arp_pkts);
 	fprintf(f, ", %llu data", scs->data_pkts);
 	fprintf(f, ", %llu flow_plimit", scs->flows_plimit);
