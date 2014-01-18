@@ -448,7 +448,8 @@ static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 		fprintf(f, "\n  %llu alloc report larger than requested_timeslots (causes a reset)",
 				scs->alloc_report_larger_than_requested);
 	if (scs->alloc_flow_not_found)
-		fprintf(f, "\n  %llu flow not found in ALLOC payload (causes reset)");
+		fprintf(f, "\n  %llu flow not found in ALLOC payload (causes reset)",
+				scs->alloc_flow_not_found);
 
 	fpproto_print_errors(sps);
 
