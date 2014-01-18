@@ -388,20 +388,23 @@ static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 
 	/* timeslot statistics */
 	fprintf(f, "\n  horizon mask 0x%016llx", st->horizon_mask);
-	fprintf(f, ", %llu successful timeslots", scs->used_timeslots);
+	fprintf(f, ", total %llu allocations", st->alloc_tslots);
+	fprintf(f, ", %llu successful timeslots", scs->sucessful_timeslots);
 	fprintf(f, " (%llu behind, %llu fast)", scs->late_enqueue, scs->early_enqueue);
 	fprintf(f, ", %llu missed", scs->missed_timeslots);
 	fprintf(f, ", %llu high_backlog", scs->backlog_too_high);
-	fprintf(f, ", %llu late", scs->alloc_too_late);
-	fprintf(f, ", %llu premature", scs->alloc_premature);
-	fprintf(f, ", %llu unrequested", st->demand_tslots - st->requested_tslots);
+	fprintf(f, ", %llu assumed_lost", scs->timeslots_assumed_lost);
+	fprintf(f, "  (%llu late", scs->alloc_too_late);
+	fprintf(f, ", %llu premature)", scs->alloc_premature);
 
 	/* total since reset */
 	fprintf(f, "\n  since reset at 0x%llX: ", sps->last_reset_time);
 	fprintf(f, " demand %llu", st->demand_tslots);
 	fprintf(f, ", requested %llu", st->requested_tslots);
+	fprintf(f, " (%llu yet unrequested)", st->demand_tslots - st->requested_tslots);
 	fprintf(f, ", acked %llu", st->acked_tslots);
-	fprintf(f, ", allocated %llu", st->alloc_tslots);
+	fprintf(f, ", allocs %llu", st->alloc_tslots);
+	fprintf(f, ", used %llu", st->used_tslots);
 
 	/* egress packet statistics */
 	fprintf(f, "\n  enqueued %llu ctrl", scs->ctrl_pkts);
@@ -429,9 +432,6 @@ static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 				scs->flow_not_found_update);
 	if (scs->req_alloc_errors)
 		fprintf(f, "\n  %llu could not allocate pkt_desc for request", scs->req_alloc_errors);
-	if (scs->flow_not_found_oob)
-		fprintf(f, "\n  %llu flow could not be found in handle_out_of_bounds_allocation!",
-				scs->flow_not_found_oob);
 	if (sks->skb_alloc_error)
 		fprintf(f, "\n  %llu control packets failed to allocate skb",
 				sks->skb_alloc_error);
@@ -441,6 +441,15 @@ static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 	if (sks->rx_fragmented)
 		fprintf(f, "\n  %llu received a fragmented skb (no current support)",
 				sks->rx_fragmented);
+	if (scs->alloc_report_flow_not_found)
+		fprintf(f, "\n  %llu flow not found in alloc report (causes a reset)",
+				scs->alloc_report_flow_not_found);
+	if (scs->alloc_report_larger_than_requested)
+		fprintf(f, "\n  %llu alloc report larger than requested_timeslots (causes a reset)",
+				scs->alloc_report_larger_than_requested);
+	if (scs->alloc_flow_not_found)
+		fprintf(f, "\n  %llu flow not found in ALLOC payload (causes reset)");
+
 	fpproto_print_errors(sps);
 
 	/* warnings */
@@ -451,9 +460,9 @@ static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 	if (scs->unwanted_alloc)
 		fprintf(f, "\n  %llu timeslots allocated beyond the demand of the flow (could happen due to reset / controller timeouts)",
 				scs->unwanted_alloc);
-	if (scs->unwanted_out_of_bounds)
-		fprintf(f, "\n  %llu out of bounds timeslots allocated beyond the demand of the flow",
-				scs->unwanted_out_of_bounds);
+	if (scs->alloc_premature)
+		fprintf(f, "\n  %llu premature allocations (something wrong with time-sync?)\n",
+				scs->alloc_premature);
 
 	fpproto_print_warnings(sps);
 
