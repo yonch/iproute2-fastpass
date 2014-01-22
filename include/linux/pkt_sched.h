@@ -801,14 +801,20 @@ enum {
 	TCA_FASTPASS_REQUEST_GAP,	/* minimum gap between requests (in ns) */
 	TCA_FASTPASS_CONTROLLER_IP,	/* controller IP, in network byte order */
 	TCA_FASTPASS_RST_WIN_USEC, /* time window to accept resets, in usec */
+	TCA_FASTPASS_TIMESLOT_MUL,	/* mul to get timeslot from nsec */
+	TCA_FASTPASS_TIMESLOT_SHIFT,/* shift to get timeslot from nsec */
+	TCA_FASTPASS_MISS_THRESHOLD,/* #timeslots after which the alloc considered missed */
+	TCA_FASTPASS_DEV_BACKLOG_NS,/* max number of ns to backlog the internal queue */
+	TCA_FASTPASS_MAX_PRELOAD,	/* #timeslots to look ahead to future when queueing internal */
+	TCA_FASTPASS_UPDATE_TIMESLOT_TIMER_NS, /* how often to update internal queue */
 	__TCA_FASTPASS_MAX
 };
 
 #define TCA_FASTPASS_MAX	(__TCA_FASTPASS_MAX - 1)
 
-#define TC_FASTPASS_SCHED_STAT_MAX_BYTES (25 * sizeof(__u64))
-#define TC_FASTPASS_SOCKET_STAT_MAX_BYTES (8 * sizeof(__u64))
-#define TC_FASTPASS_PROTO_STAT_MAX_BYTES (30 * sizeof(__u64))
+#define TC_FASTPASS_SCHED_STAT_MAX_BYTES (35 * sizeof(__u64))
+#define TC_FASTPASS_SOCKET_STAT_MAX_BYTES (12 * sizeof(__u64))
+#define TC_FASTPASS_PROTO_STAT_MAX_BYTES (50 * sizeof(__u64))
 
 struct tc_fastpass_qd_stats {
 	__u32	version;
@@ -823,15 +829,6 @@ struct tc_fastpass_qd_stats {
 	__u64	requested_tslots;
 	__u64	alloc_tslots;
 	__u64	acked_tslots;
-
-	__u64	last_reset_time;
-	__u64	out_max_seqno;
-	__u64	in_max_seqno;
-	__u32	in_sync:1;
-	__u16	consecutive_bad_pkts;
-	__u16	tx_num_unacked;
-	__u64	earliest_unacked;
-	__u64	inwnd;
 
 	__u8	sched_stats[TC_FASTPASS_SCHED_STAT_MAX_BYTES];
 	__u8	socket_stats[TC_FASTPASS_SOCKET_STAT_MAX_BYTES];

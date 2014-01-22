@@ -29,11 +29,13 @@ ADDLIB+=ipx_ntop.o ipx_pton.o
 CC = gcc
 HOSTCC = gcc
 DEFINES += -D_GNU_SOURCE
+DEFINES += -DNO_DPDK
+DEFINES += -DFASTPASS_ENDPOINT
 CCOPTS = -O2 -g
 WFLAGS := -Wall -Wstrict-prototypes  -Wmissing-prototypes
 WFLAGS += -Wmissing-declarations -Wold-style-definition
 
-CFLAGS = $(WFLAGS) $(CCOPTS) -I../include $(DEFINES)
+CFLAGS = $(WFLAGS) $(CCOPTS) -I../include $(DEFINES) -I $(HOME)/fastpass/src
 YACCFLAGS = -d -t -v
 
 SUBDIRS=lib ip tc bridge misc netem genl man

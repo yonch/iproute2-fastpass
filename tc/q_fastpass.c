@@ -48,15 +48,18 @@
 #include "utils.h"
 #include "tc_util.h"
 
-#include "/home/yonch/fastpass/src/kernel-mod/fp_statistics.h"
+#include "kernel-mod/fp_statistics.h"
+#include "protocol/fpproto.h"
 
 static void explain(void)
 {
 	fprintf(stderr, "Usage: ... fastpass [ limit PACKETS ] [ flow_limit PACKETS ]\n");
 	fprintf(stderr, "              [ buckets NUMBER ] [ rate RATE ]\n");
-	fprintf(stderr, "              [ timeslot NSECS  ] [ req_cost NSEC ]\n");
-	fprintf(stderr, "              [ req_bucket NSEC ] [ req_gap NSEC ]\n");
-	fprintf(stderr, "              [ ctrl IPADDR ]\n");
+	fprintf(stderr, "              [ timeslot_mul NUM  ] [ timeslot_shift NUM ]\n");
+	fprintf(stderr, "              [ req_cost NSEC ] [ req_bucket NSEC ] [ req_gap NSEC ]\n");
+	fprintf(stderr, "              [ ctrl IPADDR ] [ miss_threshold N_TSLOTS ]\n");
+	fprintf(stderr, "              [ backlog NSEC ] [ preload N_TSLOTS ]\n");
+	fprintf(stderr, "              [ update_timer NSEC ]\n");
 }
 
 static unsigned int ilog2(unsigned int val)
@@ -82,6 +85,12 @@ static int fastpass_parse_opt(struct qdisc_util *qu, int argc, char **argv,
 	unsigned int req_cost = ~0U;
 	unsigned int req_bucketlen = ~0U;
 	unsigned int req_min_gap = ~0U;
+	unsigned int timeslot_mul = ~0U;
+	unsigned int timeslot_shift = ~0U;
+	unsigned int miss_threshold = ~0U;
+	unsigned int dev_backlog_ns = ~0U;
+	unsigned int max_preload = ~0U;
+	unsigned int update_timeslot_timer_ns = ~0U;
 	inet_prefix ctrl_addr;
 	int has_addr = 0;
 
@@ -114,10 +123,8 @@ static int fastpass_parse_opt(struct qdisc_util *qu, int argc, char **argv,
 			}
 		} else if (strcmp(*argv, "timeslot") == 0) {
 			NEXT_ARG();
-			if (get_unsigned(&tslot_len, *argv, 0)) {
-				fprintf(stderr, "Illegal \"timeslot\"\n");
-				return -1;
-			}
+			fprintf(stderr, "Deprecated \"timeslot\", use \"timeslot_mul\" and \"timeslot_shift\"\n");
+			return -1;
 		} else if (strcmp(*argv, "req_cost") == 0) {
 			NEXT_ARG();
 			if (get_unsigned(&req_cost, *argv, 0)) {
@@ -143,6 +150,42 @@ static int fastpass_parse_opt(struct qdisc_util *qu, int argc, char **argv,
 				return -1;
 			}
 			has_addr = 1;
+		} else if (strcmp(*argv, "timeslot_mul") == 0) {
+			NEXT_ARG();
+			if (get_unsigned(&timeslot_mul, *argv, 0)) {
+				fprintf(stderr, "Illegal \"timeslot_mul\"\n");
+				return -1;
+			}
+		} else if (strcmp(*argv, "timeslot_shift") == 0) {
+			NEXT_ARG();
+			if (get_unsigned(&timeslot_shift, *argv, 0)) {
+				fprintf(stderr, "Illegal \"timeslot_shift\"\n");
+				return -1;
+			}
+		} else if (strcmp(*argv, "miss_threshold") == 0) {
+			NEXT_ARG();
+			if (get_unsigned(&miss_threshold, *argv, 0)) {
+				fprintf(stderr, "Illegal \"miss_threshold\"\n");
+				return -1;
+			}
+		} else if (strcmp(*argv, "backlog") == 0) {
+			NEXT_ARG();
+			if (get_unsigned(&dev_backlog_ns, *argv, 0)) {
+				fprintf(stderr, "Illegal \"backlog\"\n");
+				return -1;
+			}
+		} else if (strcmp(*argv, "preload") == 0) {
+			NEXT_ARG();
+			if (get_unsigned(&max_preload, *argv, 0)) {
+				fprintf(stderr, "Illegal \"preload\"\n");
+				return -1;
+			}
+		} else if (strcmp(*argv, "update_timer") == 0) {
+			NEXT_ARG();
+			if (get_unsigned(&update_timeslot_timer_ns, *argv, 0)) {
+				fprintf(stderr, "Illegal \"update_timer\"\n");
+				return -1;
+			}
 		} else if (strcmp(*argv, "help") == 0) {
 			explain();
 			return -1;
@@ -185,6 +228,24 @@ static int fastpass_parse_opt(struct qdisc_util *qu, int argc, char **argv,
 	if (has_addr != 0)
 		addattr_l(n, 1024, TCA_FASTPASS_CONTROLLER_IP,
 			  &ctrl_addr.data[0], sizeof(__u32));
+	if (timeslot_mul != ~0U)
+		addattr_l(n, 1024, TCA_FASTPASS_TIMESLOT_MUL,
+			  &timeslot_mul, sizeof(timeslot_mul));
+	if (timeslot_shift != ~0U)
+		addattr_l(n, 1024, TCA_FASTPASS_TIMESLOT_SHIFT,
+			  &timeslot_shift, sizeof(timeslot_shift));
+	if (miss_threshold != ~0U)
+		addattr_l(n, 1024, TCA_FASTPASS_MISS_THRESHOLD,
+			  &miss_threshold, sizeof(miss_threshold));
+	if (dev_backlog_ns != ~0U)
+		addattr_l(n, 1024, TCA_FASTPASS_DEV_BACKLOG_NS,
+			  &dev_backlog_ns, sizeof(dev_backlog_ns));
+	if (max_preload != ~0U)
+		addattr_l(n, 1024, TCA_FASTPASS_MAX_PRELOAD,
+			  &max_preload, sizeof(max_preload));
+	if (update_timeslot_timer_ns != ~0U)
+		addattr_l(n, 1024, TCA_FASTPASS_UPDATE_TIMESLOT_TIMER_NS,
+			  &update_timeslot_timer_ns, sizeof(update_timeslot_timer_ns));
 
 	tail->rta_len = (void *) NLMSG_TAIL(n) - (void *) tail;
 	return 0;
@@ -253,6 +314,36 @@ static int fastpass_print_opt(struct qdisc_util *qu, FILE *f, struct rtattr *opt
 		ctrl_ip_addr.s_addr = rta_getattr_u32(tb[TCA_FASTPASS_CONTROLLER_IP]);
 		fprintf(f, "ctrl %s ", inet_ntoa(ctrl_ip_addr));
 	}
+	if (tb[TCA_FASTPASS_TIMESLOT_MUL] &&
+	    RTA_PAYLOAD(tb[TCA_FASTPASS_TIMESLOT_MUL]) >= sizeof(__u32)) {
+		__u32 param = rta_getattr_u32(tb[TCA_FASTPASS_TIMESLOT_MUL]);
+		fprintf(f, "timeslot_mul %u ", param);
+	}
+	if (tb[TCA_FASTPASS_TIMESLOT_SHIFT] &&
+	    RTA_PAYLOAD(tb[TCA_FASTPASS_TIMESLOT_SHIFT]) >= sizeof(__u32)) {
+		__u32 param = rta_getattr_u32(tb[TCA_FASTPASS_TIMESLOT_SHIFT]);
+		fprintf(f, "timeslot_shift %u ", param);
+	}
+	if (tb[TCA_FASTPASS_MISS_THRESHOLD] &&
+	    RTA_PAYLOAD(tb[TCA_FASTPASS_MISS_THRESHOLD]) >= sizeof(__u32)) {
+		__u32 param = rta_getattr_u32(tb[TCA_FASTPASS_MISS_THRESHOLD]);
+		fprintf(f, "miss_threshold %u ", param);
+	}
+	if (tb[TCA_FASTPASS_DEV_BACKLOG_NS] &&
+	    RTA_PAYLOAD(tb[TCA_FASTPASS_DEV_BACKLOG_NS]) >= sizeof(__u32)) {
+		__u32 param = rta_getattr_u32(tb[TCA_FASTPASS_DEV_BACKLOG_NS]);
+		fprintf(f, "backlog %u ", param);
+	}
+	if (tb[TCA_FASTPASS_MAX_PRELOAD] &&
+	    RTA_PAYLOAD(tb[TCA_FASTPASS_MAX_PRELOAD]) >= sizeof(__u32)) {
+		__u32 param = rta_getattr_u32(tb[TCA_FASTPASS_MAX_PRELOAD]);
+		fprintf(f, "preload %u ", param);
+	}
+	if (tb[TCA_FASTPASS_UPDATE_TIMESLOT_TIMER_NS] &&
+	    RTA_PAYLOAD(tb[TCA_FASTPASS_UPDATE_TIMESLOT_TIMER_NS]) >= sizeof(__u32)) {
+		__u32 param = rta_getattr_u32(tb[TCA_FASTPASS_UPDATE_TIMESLOT_TIMER_NS]);
+		fprintf(f, "update_timer %u ", param);
+	}
 
 	return 0;
 }
@@ -274,7 +365,7 @@ static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 	st = RTA_DATA(xstats);
 
 	if (st->version != FASTPASS_STAT_VERSION) {
-		fprintf(f, "  unknown version number %d, expected %d\n",
+		fprintf(f, "  unknown statistics version number %d, expected %d\n",
 			st->version, FASTPASS_STAT_VERSION);
 		return -1;
 	}
@@ -283,36 +374,39 @@ static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 	sks = (struct fp_socket_stat *)&st->socket_stats[0];
 	sps = (struct fp_proto_stat *)&st->proto_stats[0];
 
-	/* time */
-	fprintf(f, "  timestamp 0x%llX ", st->stat_timestamp);
-	fprintf(f, ", timeslot 0x%llX", st->current_timeslot);
+	if (sps->version != FASTPASS_PROTOCOL_STATS_VERSION) {
+		fprintf(f, "  unknown protocol statistics version number %d, expected %d\n",
+			sps->version, FASTPASS_PROTOCOL_STATS_VERSION);
+		return -1;
+	}
 
-	fprintf(f, "\n  in_sync=%d", st->in_sync);
+	/* time */
+	fprintf(f, "  stat version %u ", st->version);
+	fprintf(f, ", timestamp 0x%llX ", st->stat_timestamp);
+	fprintf(f, ", timeslot 0x%llX", st->current_timeslot);
 
 	/* flow statistics */
 	fprintf(f, "\n  %u flows (%u inactive, %u unrequested)",
 		st->flows, st->inactive_flows, st->n_unreq_flows);
 	fprintf(f, ", %llu gc", scs->gc_flows);
+	fprintf(f, ", next request in %llu ns", st->time_next_request);
 
 	/* timeslot statistics */
 	fprintf(f, "\n  horizon mask 0x%016llx", st->horizon_mask);
 	fprintf(f, ", %llu successful timeslots", scs->used_timeslots);
+	fprintf(f, " (%llu behind, %llu fast)", scs->late_enqueue, scs->early_enqueue);
 	fprintf(f, ", %llu missed", scs->missed_timeslots);
+	fprintf(f, ", %llu high_backlog", scs->backlog_too_high);
 	fprintf(f, ", %llu late", scs->alloc_too_late);
 	fprintf(f, ", %llu premature", scs->alloc_premature);
 	fprintf(f, ", %llu unrequested", st->demand_tslots - st->requested_tslots);
 
 	/* total since reset */
-	fprintf(f, "\n  since reset at 0x%llX: ", st->last_reset_time);
+	fprintf(f, "\n  since reset at 0x%llX: ", sps->last_reset_time);
 	fprintf(f, " demand %llu", st->demand_tslots);
 	fprintf(f, ", requested %llu", st->requested_tslots);
 	fprintf(f, ", acked %llu", st->acked_tslots);
 	fprintf(f, ", allocated %llu", st->alloc_tslots);
-
-	/* protocol state */
-	fprintf(f, "\n  ingress_seq 0x%llX", st->in_max_seqno);
-	fprintf(f, ", inwnd 0x%016llX", st->inwnd);
-	fprintf(f, ", consecutive bad %d", st->consecutive_bad_pkts);
 
 	/* egress packet statistics */
 	fprintf(f, "\n  enqueued %llu ctrl", scs->ctrl_pkts);
@@ -323,9 +417,21 @@ static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 	fprintf(f, ", %llu ssh", scs->ssh_pkts);
 	fprintf(f, ", %llu data", scs->data_pkts);
 	fprintf(f, ", %llu flow_plimit", scs->flows_plimit);
+	fprintf(f, ", %llu too big", scs->pkt_too_big);
 
-	/* requests */
-	fprintf(f, "\n  %llu tx requests", scs->requests);
+	/* protocol state */
+	fprintf(f, "\n  protocol in_sync=%d", sps->in_sync);
+	fprintf(f, "\n  last reset 0x%llX", sps->last_reset_time);
+
+	fprintf(f, "\n  ingress_seq 0x%llX", sps->in_max_seqno);
+	fprintf(f, ", inwnd 0x%016llX", sps->inwnd);
+	fprintf(f, ", consecutive bad %d", sps->consecutive_bad_pkts);
+
+	fprintf(f, "\n  egress_seq 0x%llX", sps->out_max_seqno);
+	fprintf(f, ", earliest_unacked 0x%llX", sps->earliest_unacked);
+
+	/* TX */
+	fprintf(f, "\n  TX %llu ctrl pkts", sps->committed_pkts);
 	fprintf(f, " (%llu acked, %llu timeout, %llu fell off)", sps->acked_packets,
 			sps->timeout_pkts, sps->fall_off_outwnd);
 	fprintf(f, ", %llu w/no a-req", scs->request_with_empty_flowqueue);
@@ -334,21 +440,23 @@ static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 
 	fprintf(f, "\n  %llu ack payloads", sps->ack_payloads);
 	fprintf(f, " (%llu w/new info)", sps->informative_ack_payloads);
-	fprintf(f, ", %d currently unacked", st->tx_num_unacked);
+	fprintf(f, ", %d currently unacked", sps->tx_num_unacked);
 
-	fprintf(f, "\n  egress_seq 0x%llX", st->out_max_seqno);
-	fprintf(f, ", earliest_unacked 0x%llX", st->earliest_unacked);
-	fprintf(f, ", next request %llu ns", st->time_next_request);
-
-	/* ingress from controller */
-	fprintf(f, "\n  %llu rx ctrl pkts", sps->rx_pkts);
+	/* RX */
+	fprintf(f, "\n  RX %llu ctrl pkts", sps->rx_pkts);
 	fprintf(f, " (%llu out-of-order)", sps->rx_out_of_order);
-	fprintf(f, "\n  %llu reset payloads", sps->reset_payloads);
-	fprintf(f, " (%llu redundant, %llu out-of-window, %llu outdated)",
-			sps->redundant_reset, sps->reset_out_of_window, sps->outdated_reset);
+	fprintf(f, "\n  %llu RX reset payloads", sps->reset_payloads);
+	fprintf(f, " (%llu redundant, %llu/%llu both-recent lost/won, %llu old w/recent last, %llu recent w/old last, %llu both-old)",
+			sps->redundant_reset,
+			sps->reset_both_recent_last_reset_wins,
+			sps->reset_both_recent_payload_wins,
+			sps->reset_last_recent_payload_old,
+			sps->reset_last_old_payload_recent,
+			sps->reset_both_old);
 	/* executed resets */
-	fprintf(f, ", %llu resets", sps->proto_resets);
-	fprintf(f, " (%llu due to bad pkts)", sps->reset_from_bad_pkts);
+	fprintf(f, "\n  executed %llu resets", sps->proto_resets);
+	fprintf(f, " (%llu due to bad pkts, %llu forced)", sps->reset_from_bad_pkts,
+			sps->forced_reset);
 	fprintf(f, ", %llu no reset from bad pkts", sps->no_reset_because_recent);
 
 	/* error statistics */
@@ -384,6 +492,8 @@ static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 		fprintf(f, "\n  %llu rx incomplete ALLOC payload", sps->rx_incomplete_alloc);
 	if (sps->rx_incomplete_ack)
 		fprintf(f, "\n  %llu rx incomplete ACK payload", sps->rx_incomplete_ack);
+	if (sps->rx_incomplete_areq)
+		fprintf(f, "\n  %llu rx incomplete A-REQ payload", sps->rx_incomplete_areq);
 
 	/* warnings */
 	fprintf(f, "\n warnings:");
