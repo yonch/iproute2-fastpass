@@ -390,7 +390,9 @@ static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 	fprintf(f, "\n  horizon mask 0x%016llx", st->horizon_mask);
 	fprintf(f, ", total %llu allocations", st->alloc_tslots);
 	fprintf(f, ", %llu successful timeslots", scs->sucessful_timeslots);
-	fprintf(f, " (%llu behind, %llu fast)", scs->late_enqueue, scs->early_enqueue);
+	fprintf(f, " (%llu %llu %llu %llu behind, %llu fast)", scs->late_enqueue4,
+			scs->late_enqueue3, scs->late_enqueue2, scs->late_enqueue1,
+			scs->early_enqueue);
 	fprintf(f, ", %llu missed", scs->missed_timeslots);
 	fprintf(f, ", %llu high_backlog", scs->backlog_too_high);
 	fprintf(f, ", %llu assumed_lost", scs->timeslots_assumed_lost);
