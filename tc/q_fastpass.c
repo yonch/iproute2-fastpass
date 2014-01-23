@@ -468,6 +468,9 @@ static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 	if (scs->alloc_premature)
 		fprintf(f, "\n  %llu premature allocations (something wrong with time-sync?)\n",
 				scs->alloc_premature);
+	if (scs->clock_move_causes_reset)
+		fprintf(f, "\n  %llu large clock moves caused resets",
+				scs->clock_move_causes_reset);
 
 	fpproto_print_warnings(sps);
 
