@@ -35,7 +35,7 @@ CCOPTS = -O2 -g
 WFLAGS := -Wall -Wstrict-prototypes  -Wmissing-prototypes
 WFLAGS += -Wmissing-declarations -Wold-style-definition
 
-CFLAGS = $(WFLAGS) $(CCOPTS) -I../include $(DEFINES) -I $(HOME)/fastpass/src
+CFLAGS = $(WFLAGS) $(CCOPTS) -I../include $(DEFINES) -I $(FASTPASS_DIR)/src
 YACCFLAGS = -d -t -v
 
 SUBDIRS=lib ip tc bridge misc netem genl man
