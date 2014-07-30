@@ -48,7 +48,6 @@
 #include "utils.h"
 #include "tc_util.h"
 
-#include "kernel-mod/fp_statistics.h"
 #include "protocol/fpproto.h"
 #include "protocol/stat_print.h"
 
@@ -352,130 +351,7 @@ static int fastpass_print_opt(struct qdisc_util *qu, FILE *f, struct rtattr *opt
 static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 			   struct rtattr *xstats)
 {
-	struct tc_fastpass_qd_stats *st;
-	struct fp_sched_stat *scs;
-	struct fp_socket_stat *sks;
-	struct fp_proto_stat *sps;
-
-	if (xstats == NULL)
-		return 0;
-
-	if (RTA_PAYLOAD(xstats) < sizeof(*st))
-		return -1;
-
-	st = RTA_DATA(xstats);
-
-	if (st->version != FASTPASS_STAT_VERSION) {
-		fprintf(f, "  unknown statistics version number %d, expected %d\n",
-			st->version, FASTPASS_STAT_VERSION);
-		return -1;
-	}
-
-	scs = (struct fp_sched_stat *)&st->sched_stats[0];
-	sks = (struct fp_socket_stat *)&st->socket_stats[0];
-	sps = (struct fp_proto_stat *)&st->proto_stats[0];
-
-	/* time */
-	fprintf(f, "  stat version %u ", st->version);
-	fprintf(f, ", timestamp 0x%llX ", st->stat_timestamp);
-	fprintf(f, ", timeslot 0x%llX", st->current_timeslot);
-
-	/* flow statistics */
-	fprintf(f, "\n  %u flows (%u inactive, %u unrequested)",
-		st->flows, st->inactive_flows, st->n_unreq_flows);
-	fprintf(f, ", %llu gc", scs->gc_flows);
-	fprintf(f, ", next request in %llu ns", st->time_next_request);
-
-	/* timeslot statistics */
-	fprintf(f, "\n  horizon mask 0x%016llx", st->horizon_mask);
-	fprintf(f, ", total %llu allocations", st->alloc_tslots);
-	fprintf(f, ", %llu successful timeslots", scs->sucessful_timeslots);
-	fprintf(f, " (%llu %llu %llu %llu behind, %llu fast)", scs->late_enqueue4,
-			scs->late_enqueue3, scs->late_enqueue2, scs->late_enqueue1,
-			scs->early_enqueue);
-	fprintf(f, ", %llu missed", scs->missed_timeslots);
-	fprintf(f, ", %llu high_backlog", scs->backlog_too_high);
-	fprintf(f, ", %llu assumed_lost", scs->timeslots_assumed_lost);
-	fprintf(f, "  (%llu late", scs->alloc_too_late);
-	fprintf(f, ", %llu premature)", scs->alloc_premature);
-
-	/* total since reset */
-	fprintf(f, "\n  since reset at 0x%llX: ", sps->last_reset_time);
-	fprintf(f, " demand %llu", st->demand_tslots);
-	fprintf(f, ", requested %llu", st->requested_tslots);
-	fprintf(f, " (%llu yet unrequested)", st->demand_tslots - st->requested_tslots);
-	fprintf(f, ", acked %llu", st->acked_tslots);
-	fprintf(f, ", allocs %llu", st->alloc_tslots);
-	fprintf(f, ", used %llu", st->used_tslots);
-
-	/* egress packet statistics */
-	fprintf(f, "\n  enqueued %llu ctrl", scs->ctrl_pkts);
-	fprintf(f, ", %llu non_ctrl_highprio", scs->non_ctrl_highprio_pkts);
-	fprintf(f, ", %llu ntp", scs->ntp_pkts);
-	fprintf(f, ", %llu ptp", scs->ptp_pkts);
-	fprintf(f, ", %llu arp", scs->arp_pkts);
-	fprintf(f, ", %llu igmp", scs->igmp_pkts);
-	fprintf(f, ", %llu ssh", scs->ssh_pkts);
-	fprintf(f, ", %llu data", scs->data_pkts);
-	fprintf(f, ", %llu flow_plimit", scs->flows_plimit);
-	fprintf(f, ", %llu too big", scs->pkt_too_big);
-
-	fprintf(f, "\n  %llu requests w/no a-req", scs->request_with_empty_flowqueue);
-
-	/* protocol state */
-	fpproto_print_stats(sps);
-
-	/* error statistics */
-	fprintf(f, "\n errors:");
-	if (scs->allocation_errors)
-		fprintf(f, "\n  %llu allocation errors in fp_classify", scs->allocation_errors);
-	if (scs->classify_errors)
-		fprintf(f, "\n  %llu packets could not be classified", scs->classify_errors);
-	if (scs->flow_not_found_update)
-		fprintf(f, "\n  %llu flow could not be found in update_current_tslot!",
-				scs->flow_not_found_update);
-	if (scs->req_alloc_errors)
-		fprintf(f, "\n  %llu could not allocate pkt_desc for request", scs->req_alloc_errors);
-	if (sks->skb_alloc_error)
-		fprintf(f, "\n  %llu control packets failed to allocate skb",
-				sks->skb_alloc_error);
-	if (sks->xmit_errors)
-		fprintf(f, "\n  %llu control packets had errors traversing the IP stack",
-				sks->xmit_errors);
-	if (sks->rx_fragmented)
-		fprintf(f, "\n  %llu received a fragmented skb (no current support)",
-				sks->rx_fragmented);
-	if (scs->alloc_report_flow_not_found)
-		fprintf(f, "\n  %llu flow not found in alloc report (causes a reset)",
-				scs->alloc_report_flow_not_found);
-	if (scs->alloc_report_larger_than_requested)
-		fprintf(f, "\n  %llu alloc report larger than requested_timeslots (causes a reset)",
-				scs->alloc_report_larger_than_requested);
-	if (scs->alloc_flow_not_found)
-		fprintf(f, "\n  %llu flow not found in ALLOC payload (causes reset)",
-				scs->alloc_flow_not_found);
-
-	fpproto_print_errors(sps);
-
-	/* warnings */
-	fprintf(f, "\n warnings:");
-	if (scs->queued_flow_already_acked)
-		fprintf(f, "\n  %llu acked flows in flowqueue (possible ack just after timeout)",
-				scs->queued_flow_already_acked);
-	if (scs->unwanted_alloc)
-		fprintf(f, "\n  %llu timeslots allocated beyond the demand of the flow (could happen due to reset / controller timeouts)",
-				scs->unwanted_alloc);
-	if (scs->alloc_premature)
-		fprintf(f, "\n  %llu premature allocations (something wrong with time-sync?)\n",
-				scs->alloc_premature);
-	if (scs->clock_move_causes_reset)
-		fprintf(f, "\n  %llu large clock moves caused resets",
-				scs->clock_move_causes_reset);
-
-	fpproto_print_warnings(sps);
-
-	fprintf(f, "\n done");
-	fprintf(f, "\n");
+	fprintf(f, "please use /proc/fpq/* and /proc/fastpass/* for statistics\n");
 	return 0;
 }
 
