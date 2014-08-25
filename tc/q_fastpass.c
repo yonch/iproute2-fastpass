@@ -53,13 +53,9 @@
 
 static void explain(void)
 {
-	fprintf(stderr, "Usage: ... fastpass [ limit PACKETS ] [ flow_limit PACKETS ]\n");
+	fprintf(stderr, "Usage: ... fastpass [ limit PACKETS ]\n");
 	fprintf(stderr, "              [ buckets NUMBER ] [ rate RATE ]\n");
 	fprintf(stderr, "              [ timeslot_mul NUM  ] [ timeslot_shift NUM ]\n");
-	fprintf(stderr, "              [ req_cost NSEC ] [ req_bucket NSEC ] [ req_gap NSEC ]\n");
-	fprintf(stderr, "              [ ctrl IPADDR ] [ miss_threshold N_TSLOTS ]\n");
-	fprintf(stderr, "              [ backlog NSEC ] [ preload N_TSLOTS ]\n");
-	fprintf(stderr, "              [ update_timer NSEC ]\n");
 }
 
 static unsigned int ilog2(unsigned int val)
@@ -78,21 +74,10 @@ static int fastpass_parse_opt(struct qdisc_util *qu, int argc, char **argv,
 			struct nlmsghdr *n)
 {
 	unsigned int plimit = ~0U;
-	unsigned int flow_plimit = ~0U;
 	unsigned int buckets = 0;
 	unsigned int data_rate = ~0U;
-	unsigned int tslot_len = ~0U;
-	unsigned int req_cost = ~0U;
-	unsigned int req_bucketlen = ~0U;
-	unsigned int req_min_gap = ~0U;
 	unsigned int timeslot_mul = ~0U;
 	unsigned int timeslot_shift = ~0U;
-	unsigned int miss_threshold = ~0U;
-	unsigned int dev_backlog_ns = ~0U;
-	unsigned int max_preload = ~0U;
-	unsigned int update_timeslot_timer_ns = ~0U;
-	inet_prefix ctrl_addr;
-	int has_addr = 0;
 
 	struct rtattr *tail;
 
@@ -101,12 +86,6 @@ static int fastpass_parse_opt(struct qdisc_util *qu, int argc, char **argv,
 			NEXT_ARG();
 			if (get_unsigned(&plimit, *argv, 0)) {
 				fprintf(stderr, "Illegal \"limit\"\n");
-				return -1;
-			}
-		} else if (strcmp(*argv, "flow_limit") == 0) {
-			NEXT_ARG();
-			if (get_unsigned(&flow_plimit, *argv, 0)) {
-				fprintf(stderr, "Illegal \"flow_limit\"\n");
 				return -1;
 			}
 		} else if (strcmp(*argv, "buckets") == 0) {
@@ -121,35 +100,6 @@ static int fastpass_parse_opt(struct qdisc_util *qu, int argc, char **argv,
 				fprintf(stderr, "Illegal \"rate\"\n");
 				return -1;
 			}
-		} else if (strcmp(*argv, "timeslot") == 0) {
-			NEXT_ARG();
-			fprintf(stderr, "Deprecated \"timeslot\", use \"timeslot_mul\" and \"timeslot_shift\"\n");
-			return -1;
-		} else if (strcmp(*argv, "req_cost") == 0) {
-			NEXT_ARG();
-			if (get_unsigned(&req_cost, *argv, 0)) {
-				fprintf(stderr, "Illegal \"req_cost\"\n");
-				return -1;
-			}
-		} else if (strcmp(*argv, "req_bucket") == 0) {
-			NEXT_ARG();
-			if (get_unsigned(&req_bucketlen, *argv, 0)) {
-				fprintf(stderr, "Illegal \"req_bucket\"\n");
-				return -1;
-			}
-		} else if (strcmp(*argv, "req_gap") == 0) {
-			NEXT_ARG();
-			if (get_unsigned(&req_min_gap, *argv, 0)) {
-				fprintf(stderr, "Illegal \"req_gap\"\n");
-				return -1;
-			}
-		} else if (strcmp(*argv, "ctrl") == 0) {
-			NEXT_ARG();
-			if (get_addr_1(&ctrl_addr, *argv, AF_INET) < 0) {
-				fprintf(stderr, "Illegal \"ctrl\"\n");
-				return -1;
-			}
-			has_addr = 1;
 		} else if (strcmp(*argv, "timeslot_mul") == 0) {
 			NEXT_ARG();
 			if (get_unsigned(&timeslot_mul, *argv, 0)) {
@@ -162,30 +112,46 @@ static int fastpass_parse_opt(struct qdisc_util *qu, int argc, char **argv,
 				fprintf(stderr, "Illegal \"timeslot_shift\"\n");
 				return -1;
 			}
+		} else if (strcmp(*argv, "flow_limit") == 0) {
+			NEXT_ARG();
+			fprintf(stderr, "Deprecated \"flow_limit\".\n");
+			return -1;
+		} else if (strcmp(*argv, "timeslot") == 0) {
+			NEXT_ARG();
+			fprintf(stderr, "Deprecated \"timeslot\", use \"timeslot_mul\" and \"timeslot_shift\"\n");
+			return -1;
+		} else if (strcmp(*argv, "req_cost") == 0) {
+			NEXT_ARG();
+			fprintf(stderr, "\"req_cost\" is now passed as a kernel module parameter\n");
+			return -1;
+		} else if (strcmp(*argv, "req_bucket") == 0) {
+			NEXT_ARG();
+			fprintf(stderr, "\"req_bucket\" is now passed as a kernel module parameter \"req_bucketlen\"\n");
+			return -1;
+		} else if (strcmp(*argv, "req_gap") == 0) {
+			NEXT_ARG();
+			fprintf(stderr, "\"req_gap\" is now passed as a kernel module parameter \"req_min_gap\"\n");
+			return -1;
+		} else if (strcmp(*argv, "ctrl") == 0) {
+			NEXT_ARG();
+			fprintf(stderr, "\"ctrl\" is now passed as a kernel module parameter \"ctrl_addr\"\n");
+			return -1;
 		} else if (strcmp(*argv, "miss_threshold") == 0) {
 			NEXT_ARG();
-			if (get_unsigned(&miss_threshold, *argv, 0)) {
-				fprintf(stderr, "Illegal \"miss_threshold\"\n");
-				return -1;
-			}
+			fprintf(stderr, "\"miss_threshold\" is now passed as a kernel module parameter\n");
+			return -1;
 		} else if (strcmp(*argv, "backlog") == 0) {
 			NEXT_ARG();
-			if (get_unsigned(&dev_backlog_ns, *argv, 0)) {
-				fprintf(stderr, "Illegal \"backlog\"\n");
-				return -1;
-			}
+			fprintf(stderr, "Deprecated parameter \"backlog\"\n");
+			return -1;
 		} else if (strcmp(*argv, "preload") == 0) {
 			NEXT_ARG();
-			if (get_unsigned(&max_preload, *argv, 0)) {
-				fprintf(stderr, "Illegal \"preload\"\n");
-				return -1;
-			}
+			fprintf(stderr, "\"preload\" is now passed as a kernel module parameter \"max_preload\"\n");
+			return -1;
 		} else if (strcmp(*argv, "update_timer") == 0) {
 			NEXT_ARG();
-			if (get_unsigned(&update_timeslot_timer_ns, *argv, 0)) {
-				fprintf(stderr, "Illegal \"update_timer\"\n");
-				return -1;
-			}
+			fprintf(stderr, "\"update_timer\" is now passed as a kernel module parameter \"update_timer_ns\"\n");
+			return -1;
 		} else if (strcmp(*argv, "help") == 0) {
 			explain();
 			return -1;
@@ -202,9 +168,6 @@ static int fastpass_parse_opt(struct qdisc_util *qu, int argc, char **argv,
 	if (plimit != ~0U)
 		addattr_l(n, 1024, TCA_FASTPASS_PLIMIT,
 			  &plimit, sizeof(plimit));
-	if (flow_plimit != ~0U)
-		addattr_l(n, 1024, TCA_FASTPASS_FLOW_PLIMIT,
-			  &flow_plimit, sizeof(flow_plimit));
 	if (buckets) {
 		unsigned int log = ilog2(buckets);
 		addattr_l(n, 1024, TCA_FASTPASS_BUCKETS_LOG,
@@ -213,39 +176,12 @@ static int fastpass_parse_opt(struct qdisc_util *qu, int argc, char **argv,
 	if (data_rate != ~0U)
 		addattr_l(n, 1024, TCA_FASTPASS_DATA_RATE,
 				&data_rate, sizeof(data_rate));
-	if (tslot_len != ~0U)
-		addattr_l(n, 1024, TCA_FASTPASS_TIMESLOT_NSEC,
-			  &tslot_len, sizeof(tslot_len));
-	if (req_cost != ~0U)
-		addattr_l(n, 1024, TCA_FASTPASS_REQUEST_COST,
-			  &req_cost, sizeof(req_cost));
-	if (req_bucketlen != ~0U)
-		addattr_l(n, 1024, TCA_FASTPASS_REQUEST_BUCKET,
-			  &req_bucketlen, sizeof(req_bucketlen));
-	if (req_min_gap != ~0U)
-		addattr_l(n, 1024, TCA_FASTPASS_REQUEST_GAP,
-			  &req_min_gap, sizeof(req_min_gap));
-	if (has_addr != 0)
-		addattr_l(n, 1024, TCA_FASTPASS_CONTROLLER_IP,
-			  &ctrl_addr.data[0], sizeof(__u32));
 	if (timeslot_mul != ~0U)
 		addattr_l(n, 1024, TCA_FASTPASS_TIMESLOT_MUL,
 			  &timeslot_mul, sizeof(timeslot_mul));
 	if (timeslot_shift != ~0U)
 		addattr_l(n, 1024, TCA_FASTPASS_TIMESLOT_SHIFT,
 			  &timeslot_shift, sizeof(timeslot_shift));
-	if (miss_threshold != ~0U)
-		addattr_l(n, 1024, TCA_FASTPASS_MISS_THRESHOLD,
-			  &miss_threshold, sizeof(miss_threshold));
-	if (dev_backlog_ns != ~0U)
-		addattr_l(n, 1024, TCA_FASTPASS_DEV_BACKLOG_NS,
-			  &dev_backlog_ns, sizeof(dev_backlog_ns));
-	if (max_preload != ~0U)
-		addattr_l(n, 1024, TCA_FASTPASS_MAX_PRELOAD,
-			  &max_preload, sizeof(max_preload));
-	if (update_timeslot_timer_ns != ~0U)
-		addattr_l(n, 1024, TCA_FASTPASS_UPDATE_TIMESLOT_TIMER_NS,
-			  &update_timeslot_timer_ns, sizeof(update_timeslot_timer_ns));
 
 	tail->rta_len = (void *) NLMSG_TAIL(n) - (void *) tail;
 	return 0;
@@ -277,7 +213,7 @@ static int fastpass_print_opt(struct qdisc_util *qu, FILE *f, struct rtattr *opt
 	if (tb[TCA_FASTPASS_FLOW_PLIMIT] &&
 	    RTA_PAYLOAD(tb[TCA_FASTPASS_FLOW_PLIMIT]) >= sizeof(__u32)) {
 		flow_plimit = rta_getattr_u32(tb[TCA_FASTPASS_FLOW_PLIMIT]);
-		fprintf(f, "flow_limit %up ", flow_plimit);
+		fprintf(f, "flow_limit %up ", flow_plimit); /* note: deprecated */
 	}
 	if (tb[TCA_FASTPASS_BUCKETS_LOG] &&
 	    RTA_PAYLOAD(tb[TCA_FASTPASS_BUCKETS_LOG]) >= sizeof(__u32)) {
@@ -297,22 +233,22 @@ static int fastpass_print_opt(struct qdisc_util *qu, FILE *f, struct rtattr *opt
 	if (tb[TCA_FASTPASS_REQUEST_COST] &&
 	    RTA_PAYLOAD(tb[TCA_FASTPASS_REQUEST_COST]) >= sizeof(__u32)) {
 		req_cost = rta_getattr_u32(tb[TCA_FASTPASS_REQUEST_COST]);
-		fprintf(f, "req_cost %u ", req_cost);
+		fprintf(f, "req_cost %u ", req_cost); /* note: deprecated */
 	}
 	if (tb[TCA_FASTPASS_REQUEST_BUCKET] &&
 	    RTA_PAYLOAD(tb[TCA_FASTPASS_REQUEST_BUCKET]) >= sizeof(__u32)) {
 		req_bucketlen = rta_getattr_u32(tb[TCA_FASTPASS_REQUEST_BUCKET]);
-		fprintf(f, "req_bucket %u ", req_bucketlen);
+		fprintf(f, "req_bucket %u ", req_bucketlen); /* note: deprecated */
 	}
 	if (tb[TCA_FASTPASS_REQUEST_GAP] &&
 	    RTA_PAYLOAD(tb[TCA_FASTPASS_REQUEST_GAP]) >= sizeof(__u32)) {
 		req_min_gap = rta_getattr_u32(tb[TCA_FASTPASS_REQUEST_GAP]);
-		fprintf(f, "req_gap %u ", req_min_gap);
+		fprintf(f, "req_gap %u ", req_min_gap); /* note: deprecated */
 	}
 	if (tb[TCA_FASTPASS_CONTROLLER_IP] &&
 	    RTA_PAYLOAD(tb[TCA_FASTPASS_CONTROLLER_IP]) >= sizeof(__u32)) {
 		ctrl_ip_addr.s_addr = rta_getattr_u32(tb[TCA_FASTPASS_CONTROLLER_IP]);
-		fprintf(f, "ctrl %s ", inet_ntoa(ctrl_ip_addr));
+		fprintf(f, "ctrl %s ", inet_ntoa(ctrl_ip_addr)); /* note: deprecated */
 	}
 	if (tb[TCA_FASTPASS_TIMESLOT_MUL] &&
 	    RTA_PAYLOAD(tb[TCA_FASTPASS_TIMESLOT_MUL]) >= sizeof(__u32)) {
@@ -327,22 +263,22 @@ static int fastpass_print_opt(struct qdisc_util *qu, FILE *f, struct rtattr *opt
 	if (tb[TCA_FASTPASS_MISS_THRESHOLD] &&
 	    RTA_PAYLOAD(tb[TCA_FASTPASS_MISS_THRESHOLD]) >= sizeof(__u32)) {
 		__u32 param = rta_getattr_u32(tb[TCA_FASTPASS_MISS_THRESHOLD]);
-		fprintf(f, "miss_threshold %u ", param);
+		fprintf(f, "miss_threshold %u ", param); /* note: deprecated */
 	}
 	if (tb[TCA_FASTPASS_DEV_BACKLOG_NS] &&
 	    RTA_PAYLOAD(tb[TCA_FASTPASS_DEV_BACKLOG_NS]) >= sizeof(__u32)) {
 		__u32 param = rta_getattr_u32(tb[TCA_FASTPASS_DEV_BACKLOG_NS]);
-		fprintf(f, "backlog %u ", param);
+		fprintf(f, "backlog %u ", param); /* note: deprecated */
 	}
 	if (tb[TCA_FASTPASS_MAX_PRELOAD] &&
 	    RTA_PAYLOAD(tb[TCA_FASTPASS_MAX_PRELOAD]) >= sizeof(__u32)) {
 		__u32 param = rta_getattr_u32(tb[TCA_FASTPASS_MAX_PRELOAD]);
-		fprintf(f, "preload %u ", param);
+		fprintf(f, "preload %u ", param); /* note: deprecated */
 	}
 	if (tb[TCA_FASTPASS_UPDATE_TIMESLOT_TIMER_NS] &&
 	    RTA_PAYLOAD(tb[TCA_FASTPASS_UPDATE_TIMESLOT_TIMER_NS]) >= sizeof(__u32)) {
 		__u32 param = rta_getattr_u32(tb[TCA_FASTPASS_UPDATE_TIMESLOT_TIMER_NS]);
-		fprintf(f, "update_timer %u ", param);
+		fprintf(f, "update_timer %u ", param); /* note: deprecated */
 	}
 
 	return 0;
