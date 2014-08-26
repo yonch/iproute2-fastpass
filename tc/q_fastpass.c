@@ -351,7 +351,7 @@ static int fastpass_print_opt(struct qdisc_util *qu, FILE *f, struct rtattr *opt
 static int fastpass_print_xstats(struct qdisc_util *qu, FILE *f,
 			   struct rtattr *xstats)
 {
-	fprintf(f, "please use /proc/fpq/* and /proc/fastpass/* for statistics\n");
+	fprintf(f, "please use /proc/tsq/* and /proc/fastpass/* for statistics\n");
 	return 0;
 }
 
