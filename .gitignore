@@ -31,3 +31,6 @@ series
 .gdbinit
 .gdb_history
 *.gdb
+
+# fastpass generates GNUmakefile, ignore it
+GNUmakefile

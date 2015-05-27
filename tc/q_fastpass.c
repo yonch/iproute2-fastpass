@@ -48,7 +48,7 @@
 #include "utils.h"
 #include "tc_util.h"
 
-#include "protocol/fpproto.h"
+#include "fastpass/protocol/fpproto.h"
 #include "protocol/stat_print.h"
 
 static void explain(void)
