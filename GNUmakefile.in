@@ -1,3 +1,6 @@
 DESTDIR=@prefix@
 FASTPASS_DIR=@abs_top_srcdir@
+
+check: all
+
 include Makefile
